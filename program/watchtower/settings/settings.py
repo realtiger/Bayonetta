@@ -98,32 +98,19 @@ class Settings(BaseSettings):
     """
     database设置
     """
-    DATABASE_ENABLE: bool = False
-    WRITE_ENGINE: str = 'tortoise.backends.mysql'
-    WRITE_HOST: str = '127.0.0.1'
-    WRITE_PORT: int = 3306
-    WRITE_USER: str = 'username'
-    WRITE_PASSWORD: str = 'password'
-    WRITE_DATABASE: str = 'master'
-    WRITE_MINSIZE: int = 1
-    WRITE_MAXSIZE: int = 5
-    WRITE_CHARSET: str = 'utf8mb4'
-    WRITE_ECHO: bool = True
-
-    READ_ENGINE: str = 'tortoise.backends.mysql'
-    READ_HOST: str = '127.0.0.1'
-    READ_PORT: int = 3306
-    READ_USER: str = 'username'
-    READ_PASSWORD: str = 'password'
-    READ_DATABASE: str = 'slave'
-    READ_MINSIZE: int = 1
-    READ_MAXSIZE: int = 5
-    READ_CHARSET: str = 'utf8mb4'
-    READ_ECHO: bool = True
-
-    DB_USE_TZ: bool = False
-    DB_TIMEZONE: str = 'Asia/Shanghai'
-    TORTOISE_ORM: dict = None
+    DB_ENABLE: bool = False
+    DB_ENGINE: str = 'tortoise.backends.mysql'
+    DB_HOST: str = '127.0.0.1'
+    DB_PORT: int = 3306
+    DB_USER: str = 'username'
+    DB_PASSWORD: str = 'password'
+    DB_DATABASE: str = 'master'
+    DB_MINSIZE: int = 1
+    DB_MAXSIZE: int = 5
+    DB_CHARSET: str = 'utf8mb4'
+    DB_ECHO: bool = True
+    # DB_USE_TZ: bool = False
+    # DB_TIMEZONE: str = 'Asia/Shanghai'
 
     """
     redis设置

@@ -13,7 +13,7 @@ class Token(BaseModel):
 
 
 class PayloadDataUserInfo(BaseModel):
-    key: int | None = None
+    id: int | None = None
     name: str | None = None
     username: str | None = None
     email: str | None = None

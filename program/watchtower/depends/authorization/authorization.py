@@ -15,6 +15,11 @@ from ...status.types.response import Status, GenericBaseResponse
 
 logger = settings.LOGGER
 
+token_url = f"/{settings.URL_PREFIX.strip('/')}/login" if settings.URL_PREFIX else "/login"
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=token_url)
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl=token_url, auto_error=False)
+
 
 def get_authorization_exception(status_item: Status, headers: dict | None = None) -> SiteException:
     response = GenericBaseResponse[dict]()
@@ -27,10 +32,6 @@ def get_authorization_exception(status_item: Status, headers: dict | None = None
 
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=f"/{settings.URL_PREFIX.strip('/')}/login" if settings.URL_PREFIX else "/login"
-)
 
 
 async def get_password_hash(password):
@@ -115,4 +116,19 @@ async def signature_authentication(security_scopes: SecurityScopes, token: str =
     else:
         payload = PayloadData()
         logger.info(f"payload封装完成{payload}")
+    return payload
+
+
+async def optional_signature_authentication(security_scopes: SecurityScopes, token: str = Depends(optional_oauth2_scheme)):
+    """
+    验证权限
+    :param request:
+    :param security_scopes:
+    :param token: 传入token
+    :return: payload 信息
+    """
+    if token is None:
+        payload = PayloadData()
+    else:
+        payload = await signature_authentication(security_scopes, token)
     return payload

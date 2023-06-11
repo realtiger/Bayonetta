@@ -103,8 +103,12 @@ if settings.STATIC_URL and settings.STATIC_PATH:
     app.mount(settings.STATIC_URL, StaticFiles(directory=settings.STATIC_PATH), name="static")
 
 # 是否是一个需要数据库的项目
-if settings.DATABASE_ENABLE:
-    pass
+if settings.DB_ENABLE:
+    from oracle.sqlalchemy import sql_helper
+
+    sql_helper.init_orm()
+    # DATABASE_URL = f"{settings.WRITE_ENGINE}://{settings.WRITE_USER}:{settings.WRITE_PASSWORD}@{settings.WRITE_HOST}:{settings.WRITE_PORT}/{settings.WRITE_DATABASE}"
+    # sql_helper.register_sqlalchemy(app, DATABASE_URL, async_mode=True)
 
 
 @app.exception_handler(SiteException)

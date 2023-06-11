@@ -34,12 +34,12 @@ class GenericBaseResponse(GenericModel, Generic[DataType]):
     )
     data: Optional[DataType]
 
-    def __init__(self, status: Status = None, data=None, **kwargs: Any):
+    def __init__(self, status: Status = None, data: dict | BaseModel = None, **kwargs: Any):
         super().__init__(**kwargs)
         if status or data:
             self.update(status, data)
 
-    def update(self, status: Status = None, data=None):
+    def update(self, status: Status = None, data: dict | BaseModel = None):
         """
         更新状态信息和数据信息
         :param status: 状态信息
@@ -59,10 +59,12 @@ class GenericBaseResponse(GenericModel, Generic[DataType]):
     def as_dict(self):
         if not self.data:
             data = {}
-        elif not isinstance(self.data, dict):
-            data = self.data.__dict__
-        else:
+        elif isinstance(self.data, BaseModel):
+            data = self.data.dict()
+        elif isinstance(self.data, dict):
             data = self.data
+        else:
+            data = self.data.__dict__
 
         return {"code": self.code, "success": self.success, "message": self.message, "data": data}
 
@@ -80,3 +82,16 @@ def generate_response_model(model_name: str, status: Status, data: Field = Field
     message = Field(default=status.message, example=status.message)
 
     return create_model(model_name, code=code, success=success, message=message, data=data)
+
+
+# ### response 数据格式定义 ###
+class PaginationData(BaseModel):
+    index: int = Field(default=1, description='查看第几页', title='当前页码', example=1)
+    limit: int = Field(default=1, description='每页显示几个数据', title='每页数据', example=20)
+    offset: int = Field(default=0, description='从第几个数据开始读取，也就是index和limit的乘积', title='偏移量', example=0)
+    total: int = Field(default=0, description='数据总量', title='总数', example=300)
+
+
+class GetAllData(BaseModel):
+    items: list = Field(default=[], description="列表数据", title="数据", example=[])
+    pagination: PaginationData

@@ -18,6 +18,13 @@ fastapi + sqlalchemy + pydantic
    ```
    export PYTHONPATH=$(pwd)/program
    ```
+3. 修改配置文件
+    
+    目前项目中的配置文件使用 .env 文件，可以根据自己的需要修改配置文件。
+    ```
+    cp .env.example .env
+    vim .env
+    ```
 3. 运行入口文件
     ```
     poetry python manager.py
