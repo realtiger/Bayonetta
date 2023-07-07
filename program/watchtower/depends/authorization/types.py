@@ -2,9 +2,11 @@ import enum
 
 from pydantic import BaseModel, Field
 
+
 class TokenType(enum.Enum):
     TOKEN = 'token'
     REFRESH_TOKEN = 'refresh_token'
+
 
 class Token(BaseModel):
     access_token: str = Field(default="", example="access_token")
@@ -18,13 +20,14 @@ class PayloadDataUserInfo(BaseModel):
     username: str | None = None
     email: str | None = None
     avatar: str | None = None
+    superuser: bool = False
 
 
 class PayloadData(BaseModel):
     """
     iss：Issuer 发行人
-    exp：Expiration time到期时间
     sub：Subject 主题
+    exp：Expiration time到期时间
     aud：Audience 用户
     nbf：Not before 在此之前不可用
     iat：Issued at 发布时间
@@ -34,11 +37,11 @@ class PayloadData(BaseModel):
     """
     iss: str | None = None
     sub: str | None = None
-    exp: str | None = None
+    exp: int | str | None = None
     # 可以访问的网站资源
     aud: list[str] | str | None = None
-    nbf: str | None = None
-    iat: str | None = None
+    nbf: int | str | None = None
+    iat: int | str | None = None
     jti: str | None = None
     scopes: list[str] = []
     # PayloadDataUserInfo 类型的 dict

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseSettings
 
-from .logger_config import get_logging_dict, ColorFormatter
+from watchtower.settings.logger_config import get_logging_dict, ColorFormatter
 
 BASE_DIR = Path(__file__).parent.parent.parent
 PROJECT_NAME = BASE_DIR.name
@@ -96,6 +96,23 @@ class Settings(BaseSettings):
     LICENSE_INFO: dict = None
 
     """
+    web设置
+    """
+    WEB_TITLE: str = SITE_TITLE
+    WEB_DESCRIPTION: str = SITE_DESCRIPTION
+    WEB_VERSION: str = DOCS_VERSION
+    WEB_WHITE_TABLE: dict[str, list[str]] = {
+        'GET': [
+            '/api/admin/logout/',
+            '/api/admin/app-data/'
+        ],
+        'POST': [
+            '/api/admin/login/',
+            '/api/admin/auth/refresh/'
+        ]
+    }
+
+    """
     database设置
     """
     DB_ENABLE: bool = False
@@ -153,10 +170,9 @@ class Settings(BaseSettings):
             self.LOGGER = logging.getLogger(self.PROJECT_NAME)
             for handler in self.LOGGER.handlers:
                 if handler.name == 'console':
-                    formatter = ColorFormatter(
-                        fmt='%(asctime)s %(levelname)s %(name)s %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S'
-                    )
+                    fmt = logging_dict['formatters']['console']['format']
+                    date_fmt = logging_dict['formatters']['console']['datefmt']
+                    formatter = ColorFormatter(fmt=fmt, datefmt=date_fmt)
                     handler.setFormatter(formatter)
                     break
 

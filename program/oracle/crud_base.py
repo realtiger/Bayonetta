@@ -6,7 +6,7 @@ from fastapi.types import DecoratedCallable
 from pydantic import create_model
 from pydantic.generics import GenericModel
 
-from .types import T, DEPENDENCIES, PAGINATION, PYDANTIC_SCHEMA
+from oracle.types import T, DEPENDENCIES, PAGINATION, PYDANTIC_SCHEMA
 
 
 def get_pk_type(schema: Type[PYDANTIC_SCHEMA], pk_field: str) -> type:
@@ -108,7 +108,7 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         :param paginate: 分页大小, 默认为10
         :param get_all_route: 是否生成获取全部数据的路由, 默认为True. 如果传入Depends列表, 则会在获取全部数据的路由上添加依赖
         :param get_all_route_params: 获取全部数据的路由的参数, 默认为None. 如果传入字典, 则会在创建路由时使用该参数
-                        支持 summary 和 description 两个参数
+                        支持 summary、description、response_model、responses 参数
         :param get_one_route: 是否生成获取单条数据的路由, 默认为True. 如果传入Depends列表, 则会在获取单条数据的路由上添加依赖
         :param get_one_route_params: 获取单条数据的路由的参数, 默认为None. 如果传入字典, 则会在创建路由时使用该参数
         :param create_route: 是否生成创建数据的路由, 默认为True. 如果传入Depends列表, 则会在创建数据的路由上添加依赖
@@ -201,13 +201,16 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         if get_all_route is not False:
             summary = description = f'Get All {self.schema.__name__.capitalize()}'
 
-            summary, description, responses = self.format_params(summary, description, get_all_route_params)
+            summary, description, responses, response_model = self.format_params(summary, description, get_all_route_params)
+
+            if response_model is None:
+                response_model = Sequence[self.schema]
 
             self._add_api_route(
                 '',
                 self._get_all(),
                 methods=['GET'],
-                response_model=Sequence[self.schema],
+                response_model=response_model,
                 summary=summary,
                 description=description,
                 dependencies=get_all_route,
@@ -216,13 +219,16 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         if create_route is not False:
             summary = description = f'Create One {self.schema.__name__.capitalize()}'
 
-            summary, description, responses = self.format_params(summary, description, create_route_params, add_key_exist=True, add_create_fail=True)
+            summary, description, responses, response_model = self.format_params(summary, description, create_route_params, add_key_exist=True, add_create_fail=True)
+
+            if response_model is None:
+                response_model = self.schema
 
             self._add_api_route(
                 '',
                 self._create(),
                 methods=['POST'],
-                response_model=self.schema,
+                response_model=response_model,
                 summary=summary,
                 description=description,
                 dependencies=create_route,
@@ -231,13 +237,16 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         if delete_all_route is not False:
             summary = description = f'Delete All {self.schema.__name__.capitalize()}'
 
-            summary, description, responses = self.format_params(summary, description, delete_all_route_params)
+            summary, description, responses, response_model = self.format_params(summary, description, delete_all_route_params)
+
+            if response_model is None:
+                response_model = Sequence[self.schema]
 
             self._add_api_route(
                 '',
                 self._delete_all(),
                 methods=['DELETE'],
-                response_model=Sequence[self.schema],
+                response_model=response_model,
                 summary=summary,
                 description=description,
                 dependencies=delete_all_route,
@@ -246,13 +255,16 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         if get_one_route is not False:
             summary = description = f'Get One {self.schema.__name__.capitalize()}'
 
-            summary, description, responses = self.format_params(summary, description, get_one_route_params, add_404=True)
+            summary, description, responses, response_model = self.format_params(summary, description, get_one_route_params, add_404=True)
+
+            if response_model is None:
+                response_model = self.schema
 
             self._add_api_route(
                 '/{item_id}',
                 self._get_one(),
                 methods=['GET'],
-                response_model=self.schema,
+                response_model=response_model,
                 summary=summary,
                 description=description,
                 dependencies=get_one_route,
@@ -261,13 +273,16 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         if update_route is not False:
             summary = description = f'Update One {self.schema.__name__.capitalize()}'
 
-            summary, description, responses = self.format_params(summary, description, update_route_params, add_404=True, add_update_fail=True)
+            summary, description, responses, response_model = self.format_params(summary, description, update_route_params, add_404=True, add_update_fail=True, add_key_exist=True)
+
+            if response_model is None:
+                response_model = self.schema
 
             self._add_api_route(
                 '/{item_id}',
                 self._update(),
                 methods=['PUT'],
-                response_model=self.schema,
+                response_model=response_model,
                 summary=summary,
                 description=description,
                 dependencies=update_route,
@@ -276,13 +291,16 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         if delete_one_route is not False:
             summary = description = f'Delete One {self.schema.__name__.capitalize()}'
 
-            summary, description, responses = self.format_params(summary, description, delete_one_route_params, add_404=True, add_delete_fail=True)
+            summary, description, responses, response_model = self.format_params(summary, description, delete_one_route_params, add_404=True, add_delete_fail=True)
+
+            if response_model is None:
+                response_model = self.schema
 
             self._add_api_route(
                 '/{item_id}',
                 self._delete_one(),
                 methods=['DELETE'],
-                response_model=self.schema,
+                response_model=response_model,
                 summary=summary,
                 description=description,
                 dependencies=delete_one_route,
@@ -300,11 +318,13 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
             add_create_fail: bool = False,
             add_update_fail: bool = False,
             add_delete_fail: bool = False
-    ) -> tuple[str, str, dict]:
+    ) -> tuple[str, str, dict, Any]:
+        response_model = None
         if isinstance(params, dict):
             summary = params.get('summary', summary)
             description = params.get('description', description)
             responses = params.get('responses', responses)
+            response_model = params.get('response_model')
 
         if not isinstance(responses, dict):
             responses = {}
@@ -324,7 +344,7 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         if add_delete_fail:
             responses[525] = {'detail': 'Delete Fail'}
 
-        return summary, description, responses
+        return summary, description, responses, response_model
 
     def api_route(self, path: str, methods: list[str] = None, *args, **kwargs) -> Callable[[DecoratedCallable], DecoratedCallable]:
         """ Overrides and exiting route if it exists"""

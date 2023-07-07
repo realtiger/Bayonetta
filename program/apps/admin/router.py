@@ -1,11 +1,13 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from apps.admin.views.auth import router as auth_router
 from apps.admin.views.operation_record import router as operation_record_router
+from apps.admin.views.user_handler.user import router as user_router, tags_metadata as user_tags_metadata
+from watchtower import signature_authentication
 
-router = APIRouter()
+router = APIRouter(prefix='/admin', dependencies=[Depends(signature_authentication)])
 
-router.include_router(auth_router, tags=['auth'])
+router.include_router(user_router, tags=['user'])
 router.include_router(operation_record_router, tags=['operation'])
 
-tags_metadata = [{"name": "auth", "description": "认证处理", }]
+tags_metadata = []
+tags_metadata.extend(user_tags_metadata)

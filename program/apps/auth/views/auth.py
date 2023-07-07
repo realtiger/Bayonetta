@@ -1,14 +1,20 @@
+import json
+from calendar import timegm
 from datetime import timedelta, datetime
 
 from fastapi import Depends, APIRouter, Request, Form
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
 
-from oracle import ModelStatus
-from watchtower import generate_response_model, StatusMap, SiteException, Response, settings
-from watchtower.depends.authorization import Token, verify_password, PayloadData, PayloadDataUserInfo, create_access_token, TokenType, signature_authentication
-from watchtower.depends.cache import CacheSystem, cache
-
-logger = settings.LOGGER
+from apps.admin.models import User, Role, Permission, PermissionMethods
+from oracle.sqlalchemy import sql_helper
+from oracle.types import ModelStatus
+from watchtower import generate_response_model, SiteException, Response, settings
+from watchtower.depends.authorization.authorization import verify_password, create_access_token, signature_authentication
+from watchtower.depends.authorization.types import Token, PayloadData, PayloadDataUserInfo, TokenType
+from watchtower.depends.cache.cache import CacheSystem, cache
+from watchtower.settings import settings, logger
+from watchtower.status.global_status import StatusMap
 
 router = APIRouter()
 
@@ -16,9 +22,10 @@ IdentifyInvalid = generate_response_model("IdentifyInvalid", StatusMap.IDENTIFY_
 UserNotActive = generate_response_model("UserNotActive", StatusMap.USER_NOT_ACTIVE)
 LoginFailed = generate_response_model("LoginFailed", StatusMap.LOGIN_FAILED)
 
-IDENTIFY_INVALID_CODE = 400
-LOGIN_FAILED_CODE = 540
-USER_NOT_ACTIVE_CODE = 541
+# INVALIDATE_CREDENTIALS_CODE = 401
+IDENTIFY_INVALID_CODE = 540
+LOGIN_FAILED_CODE = 541
+USER_NOT_ACTIVE_CODE = 542
 
 login_responses = {
     IDENTIFY_INVALID_CODE: {
@@ -35,20 +42,20 @@ login_responses = {
             }
         }
     },
-    401: {
-        "model": IdentifyInvalid,
-        "description": "认证失败",
-        "content": {
-            "application/json": {
-                "example": {
-                    "code": StatusMap.INVALIDATE_CREDENTIALS.code,
-                    "success": StatusMap.INVALIDATE_CREDENTIALS.success,
-                    "message": StatusMap.INVALIDATE_CREDENTIALS.message,
-                    "data": {}
-                }
-            }
-        }
-    },
+    # INVALIDATE_CREDENTIALS_CODE: {
+    #     "model": IdentifyInvalid,
+    #     "description": "认证失败",
+    #     "content": {
+    #         "application/json": {
+    #             "example": {
+    #                 "code": StatusMap.INVALIDATE_CREDENTIALS.code,
+    #                 "success": StatusMap.INVALIDATE_CREDENTIALS.success,
+    #                 "message": StatusMap.INVALIDATE_CREDENTIALS.message,
+    #                 "data": {}
+    #             }
+    #         }
+    #     }
+    # },
     LOGIN_FAILED_CODE: {
         "model": LoginFailed,
         "description": "登录失败，服务器错误",
@@ -95,27 +102,36 @@ class OAuth2RequestForm(OAuth2PasswordRequestForm):
         self.remember = remember
 
 
-def get_user_info(username: str):
+async def get_user_info(username: str) -> User | None:
     """
     获取用户信息
-    :param username:
-    :return:
+    :param username: 查找用户的用户名
+    :return: User
     """
+    # 通过用户名查找用户并加载用户的角色
+    # select_user_statement = select(User).where(User.username == username).join(User.roles, isouter=True).options(selectinload(User.roles))
+    # 通过用户名查找权限
+    # select_user_permission_statement = select(User).join(User.roles, isouter=True).join(Role.permissions, isouter=True).join(Permission, isouter=True) \
+    #     .where(User.username == username).options(selectinload(User.roles), selectinload(Role.permissions))
+    select_user_statement = select(User).where(User.username == username)
+    async with sql_helper.get_session().begin() as session:
+        user = (await session.execute(select_user_statement)).scalar_one_or_none()
 
-    class User:
-        username = ''
-        password = ''
-        status = ModelStatus.ACTIVE
-        id = ''
-        name = ''
-        avatar = ''
-        email = ''
-
-    user = User()
-    if username == 'admin':
-        user.username = 'admin'
-        user.password = '$2b$12$yu3rMjDKSRSkETz97HhsMuNs0IJB4A08qlG8QFMa152zy4HiijVba'
     return user
+
+
+async def get_permissions_by_user_id(user_id: int) -> list[Permission]:
+    """
+    通过用户id获取权限
+    :param user_id: 用户id
+    :return: 权限列表
+    """
+    select_permissions_statement = select(Permission.id, Permission.method, Permission.url).join(User.roles).join(Role.permissions) \
+        .where(User.id == user_id, Permission.status == ModelStatus.ACTIVE)
+    async with sql_helper.get_session().begin() as session:
+        permissions = (await session.execute(select_permissions_statement)).all()
+
+    return permissions
 
 
 async def generate_token(form_data: OAuth2RequestForm, cache_client: CacheSystem, login_ip: str = "0.0.0.0", is_token: bool = True):
@@ -139,8 +155,8 @@ async def generate_token(form_data: OAuth2RequestForm, cache_client: CacheSystem
             scopes = ""
         else:
             scopes = form_data.scopes
-        # TODO 测试用查找用户
-        user = get_user_info(form_data.username)
+
+        user = await get_user_info(form_data.username)
 
         # 用户认证是否通过标志位
         is_auth = False
@@ -157,7 +173,7 @@ async def generate_token(form_data: OAuth2RequestForm, cache_client: CacheSystem
                 raise SiteException(status_code=USER_NOT_ACTIVE_CODE, response=response)
 
             # 获取用户基本信息
-            data = PayloadDataUserInfo(id=user.id, name=user.name, email=user.email, avatar=user.avatar, username=user.username)
+            data = PayloadDataUserInfo(id=user.id, name=user.name, email=user.email, avatar=user.avatar, username=user.username, superuser=user.superuser)
 
             # 记住密码或者刷新token时设置过期时间,否则不设置过期时间
             if form_data.remember or not is_token:
@@ -174,19 +190,32 @@ async def generate_token(form_data: OAuth2RequestForm, cache_client: CacheSystem
 
             access_token = await create_access_token(payload=PayloadData(scopes=scopes, data=data, aud=user.username))
             refresh_token = await create_access_token(
-                payload=PayloadData(scopes=scopes, data=data.dict(), aud=user.username),
+                payload=PayloadData(scopes=scopes, data=data, aud=user.username),
                 expires_delta=expires_delta,
                 subject=TokenType.REFRESH_TOKEN
             )
 
-            # TODO 存储权限
-            await cache_client.set_permission(identify=user.id, value='all', expire=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+            # 获取权限信息，然后存储到缓存中
+            permissions = dict()
+            for method in PermissionMethods.__members__.keys():
+                permissions[method] = list()
+
+            permission_queryset = await get_permissions_by_user_id(user.id)
+            for permission in permission_queryset:
+                permissions[permission.method.name].append(permission.url)
+
+            # 如果权限为空，则删除该key，即空访问方法
+            permissions = {method: json.dumps(permissions[method]) for method in permissions if permissions[method]}
+
+            await cache_client.set_permission(identify=user.id, permissions=permissions, expire=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
 
             if is_token:
+                # 用户保存登录ip和登录时间
                 user.last_login_ip = login_ip
                 user.last_login_time = datetime.now()
-                # TODO 用户保存登录ip和登录时间
-                # await user.save(update_fields=['last_login_ip', 'last_login_time'])
+                async with sql_helper.get_session().begin() as session:
+                    await session.merge(user)
+
     except SiteException as error:
         logger.error(f"用户登录错误，错误原因为：{error.response.message}")
         raise error
@@ -262,3 +291,22 @@ async def refresh(payload: PayloadData = Depends(signature_authentication), cach
     response = Response()
     response.update(StatusMap.IDENTIFY_INVALID)
     raise SiteException(status_code=IDENTIFY_INVALID_CODE, response=response)
+
+
+@router.post(
+    "/logout",
+    response_model=Response,
+    summary="登出接口，清除token"
+)
+async def logout(payload: PayloadData = Depends(signature_authentication), cache_client: CacheSystem = Depends(cache)):
+    """
+    登出接口，清除token
+    \f
+    :param payload: token 负载数据
+    :param cache_client: 缓存客户端
+    :return:
+    """
+    expire = payload.exp - timegm(datetime.utcnow().utctimetuple())
+    await cache_client.set_blacklist(identify=payload.data.id, value=payload.json(), expire=expire)
+    await cache_client.delete_permission(identify=payload.data.id)
+    return Response()

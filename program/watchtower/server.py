@@ -6,11 +6,11 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .global_router import routers, tags_metadata
-from .middleware.middlewares import middlewares
-from .settings import settings, logger
-from .status.types.exception import SiteException
-from .status.types.response import Status
+from watchtower.global_router import routers, tags_metadata
+from watchtower.middleware.middlewares import middlewares
+from watchtower.settings import settings, logger
+from watchtower.status.types.exception import SiteException
+from watchtower.status.types.response import Status
 
 
 # ###################

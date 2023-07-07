@@ -1,6 +1,6 @@
 from redis import asyncio as aioredis
 
-from ....settings import settings
+from watchtower.settings import settings
 
 
 def create_conn_pool() -> aioredis.ConnectionPool:

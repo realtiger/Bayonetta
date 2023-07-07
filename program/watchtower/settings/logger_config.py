@@ -8,9 +8,9 @@ from pathlib import Path
 # 日志格式类，用于Linux系统下，使控制台输出的日志带颜色
 class ColorFormatter(logging.Formatter):
     log_colors = {
-        'CRITICAL': '\033[0;31m%s\033[0m',
-        'ERROR': '\033[0;33m%s\033[0m',
-        'WARNING': '\033[0;35m%s\033[0m',
+        'CRITICAL': '\033[0;31;47m%s\033[0m',
+        'ERROR': '\033[0;33;41m%s\033[0m',
+        'WARNING': '\033[0;35;46m%s\033[0m',
         'INFO': '\033[0;32m%s\033[0m',
         'DEBUG': '\033[0;00m%s\033[0m',
     }
@@ -108,6 +108,12 @@ def get_logging_dict(log_level: str, log_dir: Path, project_name: str = "program
             },
         },
         'loggers': {
+            # 默认的logger应用如下配置
+            '': {
+                'handlers': ['default', 'console'],
+                'level': log_level,
+                'propagate': True
+            },
             project_name: {
                 'handlers': ['default', 'console'],
                 'level': log_level,

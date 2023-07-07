@@ -2,3 +2,4 @@
 
 .env
 program/logs
+program/alembic/versions

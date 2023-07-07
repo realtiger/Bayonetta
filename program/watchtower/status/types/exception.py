@@ -1,4 +1,4 @@
-from .response import GenericBaseResponse, common_error_status
+from watchtower.status.types.response import GenericBaseResponse
 
 
 class SiteException(Exception):
