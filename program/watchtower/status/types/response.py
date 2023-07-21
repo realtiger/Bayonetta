@@ -36,8 +36,11 @@ class GenericBaseResponse(GenericModel, Generic[DataType]):
 
     def __init__(self, status: Status = None, data: dict | BaseModel = None, **kwargs: Any):
         super().__init__(**kwargs)
-        if status or data:
-            self.update(status, data)
+        if data is None:
+            data = {}
+        if status is None:
+            status = success_status
+        self.update(status, data)
 
     def update(self, status: Status = None, data: dict | BaseModel = None):
         """

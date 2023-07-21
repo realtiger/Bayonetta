@@ -89,7 +89,7 @@ def get_logging_dict(log_level: str, log_dir: Path, project_name: str = "program
                 'formatter': 'console',
             },
             'server_handler': {
-                'level': 'DEBUG',
+                'level': 'INFO',
                 'class': 'logging.handlers.RotatingFileHandler',
                 'filename': log_dir / 'server.log',
                 'maxBytes': 1024 * 1024 * 5,
@@ -110,12 +110,12 @@ def get_logging_dict(log_level: str, log_dir: Path, project_name: str = "program
         'loggers': {
             # 默认的logger应用如下配置
             '': {
-                'handlers': ['default', 'console'],
+                'handlers': ['console'],
                 'level': log_level,
                 'propagate': True
             },
             project_name: {
-                'handlers': ['default', 'console'],
+                'handlers': ['default', 'server_handler', 'error_handler'],
                 'level': log_level,
                 'propagate': True
             },

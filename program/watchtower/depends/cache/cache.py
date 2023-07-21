@@ -20,6 +20,10 @@ def get_blacklist_key(identify: str) -> str:
     return f'blacklist_{identify}'
 
 
+def get_anonymous_menus_key() -> str:
+    return 'anonymous_menus'
+
+
 class CacheSystem:
     def __init__(self, backend):
         self.backend = backend
@@ -53,6 +57,13 @@ class CacheSystem:
             return await self.backend.delete(key)
         except Exception as e:
             logger.error(f'delete cache error: {e}')
+            raise CACHE_SYSTEM_EXCEPTION from e
+
+    async def hash_get(self, key: str, field: str):
+        try:
+            return await self.backend.hget(key, field)
+        except Exception as e:
+            logger.error(f'hash get cache error: {e}')
             raise CACHE_SYSTEM_EXCEPTION from e
 
     async def hash_multi_set(self, key: str, mapping: dict):
@@ -95,8 +106,15 @@ class CacheSystem:
         await self.set_expire(permission_key, expire)
         return data
 
-    async def get_permission(self, identify: int | str, fields: list):
-        return await self.hash_multi_get(get_permission_key(str(identify)), fields)
+    async def get_permission(self, identify: int | str, fields: list | str):
+        if not fields:
+            return None
+
+        if isinstance(fields, str):
+            permissions = await self.hash_get(get_permission_key(str(identify)), fields)
+        else:
+            permissions = await self.hash_multi_get(get_permission_key(str(identify)), fields)
+        return permissions
 
     async def delete_permission(self, identify: int | str):
         return await self.hash_delete(get_permission_key(str(identify)))
@@ -109,6 +127,12 @@ class CacheSystem:
 
     async def delete_blacklist(self, identify: int | str):
         return await self.delete(get_blacklist_key(str(identify)))
+
+    async def set_anonymous_menus(self, value: str, expire: int = 180):
+        return await self.set(get_anonymous_menus_key(), value, expire)
+
+    async def get_anonymous_menus(self):
+        return await self.get(get_anonymous_menus_key())
 
 
 # TODO 目前只有redis，后续可以扩展

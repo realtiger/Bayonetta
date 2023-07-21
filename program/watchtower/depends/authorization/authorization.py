@@ -71,7 +71,6 @@ async def create_access_token(payload: PayloadData, expires_delta: timedelta = N
     payload.iss = settings.SITE_NAME
     # 接收者
     payload.sub = subject.value
-    # 为以后黑名单禁用提前赋值标记
     payload.jti = f"{payload.aud}{payload.iat}"
 
     to_encode = {key: value for key, value in jsonable_encoder(payload).items() if value is not None}
@@ -173,8 +172,10 @@ async def optional_signature_authentication(
     :param cache_client: 缓存客户端
     :return: payload 信息
     """
-    if token is None:
-        payload = PayloadData()
-    else:
-        payload = await signature_authentication(request, security_scopes, token=token, cache_client=cache_client)
+    payload = PayloadData()
+    if token is not None:
+        try:
+            payload = await signature_authentication(request, security_scopes, token=token, cache_client=cache_client)
+        except Exception as e:
+            logger.warning(f"optional_signature_authentication => {e}")
     return payload

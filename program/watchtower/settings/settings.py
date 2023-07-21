@@ -167,7 +167,7 @@ class Settings(BaseSettings):
             logging_dict = get_logging_dict(self.LOG_LEVEL, self.BASE_DIR / self.LOG_DIR, self.PROJECT_NAME)
             logging.config.dictConfig(logging_dict)
 
-            self.LOGGER = logging.getLogger(self.PROJECT_NAME)
+            self.LOGGER = logging.getLogger('root')
             for handler in self.LOGGER.handlers:
                 if handler.name == 'console':
                     fmt = logging_dict['formatters']['console']['format']

@@ -5,6 +5,14 @@ from typing import TypeVar, Sequence
 from fastapi import Depends
 from pydantic import BaseModel, Field
 
+# 定义规定的错误码
+ITEM_NOT_FOUND_CODE = 264
+MULTIPLE_RESULTS_FOUND_CODE = 265
+PRIMARY_KEY_EXISTED_CODE = 266
+CREATE_FAILED_CODE = 267
+UPDATE_FAILED_CODE = 268
+DELETE_FAILED_CODE = 269
+
 T = TypeVar("T", bound=BaseModel)
 DEPENDENCIES = Sequence[Depends] | None
 PYDANTIC_SCHEMA = BaseModel

@@ -13,7 +13,8 @@ from sqlalchemy.orm import ColumnProperty, RelationshipProperty, DeclarativeBase
 
 from oracle.crud_base import CRUDGenerator, get_pk_type
 from oracle.snowflake import snow
-from oracle.types import DEPENDENCIES, PYDANTIC_SCHEMA as SCHEMA, PAGINATION, ModelStatus, T
+from oracle.types import DEPENDENCIES, PYDANTIC_SCHEMA as SCHEMA, PAGINATION, ModelStatus, T, ITEM_NOT_FOUND_CODE, MULTIPLE_RESULTS_FOUND_CODE, PRIMARY_KEY_EXISTED_CODE, \
+    CREATE_FAILED_CODE, UPDATE_FAILED_CODE, DELETE_FAILED_CODE
 from watchtower import PayloadData, optional_signature_authentication, Response, SiteException
 from watchtower.settings import logger, settings
 from watchtower.status.global_status import StatusMap
@@ -30,13 +31,6 @@ PrimaryKeyExisted = generate_response_model("PrimaryKeyExisted", StatusMap.PRIMA
 CreateFailed = generate_response_model("CreateFailed", StatusMap.CREATE_FAILED)
 UpdateFailed = generate_response_model("UpdateFailed", StatusMap.UPDATE_FAILED)
 DeleteFailed = generate_response_model("DeleteFailed", StatusMap.DELETE_FAILED)
-
-ITEM_NOT_FOUND_CODE = 504
-MULTIPLE_RESULTS_FOUND_CODE = 505
-PRIMARY_KEY_EXISTED_CODE = 541
-CREATE_FAILED_CODE = 542
-UPDATE_FAILED_CODE = 543
-DELETE_FAILED_CODE = 544
 
 ITEM_NOT_FOUND_RESPONSE = {
     ITEM_NOT_FOUND_CODE: {

@@ -4,13 +4,14 @@ from datetime import timedelta, datetime
 
 from fastapi import Depends, APIRouter, Request, Form
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
-from apps.admin.models import User, Role, Permission, PermissionMethods
+from apps.admin.models import User, Role, Permission, PermissionMethods, Menu
+from apps.auth.views.auth_types import LoadData, UserInfo
 from oracle.sqlalchemy import sql_helper
 from oracle.types import ModelStatus
 from watchtower import generate_response_model, SiteException, Response, settings
-from watchtower.depends.authorization.authorization import verify_password, create_access_token, signature_authentication
+from watchtower.depends.authorization.authorization import verify_password, create_access_token, signature_authentication, optional_signature_authentication
 from watchtower.depends.authorization.types import Token, PayloadData, PayloadDataUserInfo, TokenType
 from watchtower.depends.cache.cache import CacheSystem, cache
 from watchtower.settings import settings, logger
@@ -23,9 +24,9 @@ UserNotActive = generate_response_model("UserNotActive", StatusMap.USER_NOT_ACTI
 LoginFailed = generate_response_model("LoginFailed", StatusMap.LOGIN_FAILED)
 
 # INVALIDATE_CREDENTIALS_CODE = 401
-IDENTIFY_INVALID_CODE = 540
-LOGIN_FAILED_CODE = 541
-USER_NOT_ACTIVE_CODE = 542
+IDENTIFY_INVALID_CODE = 261
+LOGIN_FAILED_CODE = 262
+USER_NOT_ACTIVE_CODE = 263
 
 login_responses = {
     IDENTIFY_INVALID_CODE: {
@@ -108,11 +109,6 @@ async def get_user_info(username: str) -> User | None:
     :param username: 查找用户的用户名
     :return: User
     """
-    # 通过用户名查找用户并加载用户的角色
-    # select_user_statement = select(User).where(User.username == username).join(User.roles, isouter=True).options(selectinload(User.roles))
-    # 通过用户名查找权限
-    # select_user_permission_statement = select(User).join(User.roles, isouter=True).join(Role.permissions, isouter=True).join(Permission, isouter=True) \
-    #     .where(User.username == username).options(selectinload(User.roles), selectinload(Role.permissions))
     select_user_statement = select(User).where(User.username == username)
     async with sql_helper.get_session().begin() as session:
         user = (await session.execute(select_user_statement)).scalar_one_or_none()
@@ -120,16 +116,118 @@ async def get_user_info(username: str) -> User | None:
     return user
 
 
-async def get_permissions_by_user_id(user_id: int) -> list[Permission]:
+def format_menu_item(menu: Menu) -> dict:
     """
-    通过用户id获取权限
+    格式化菜单数据
+    :param menu: 菜单对象
+    :return: 格式化后的菜单数据
+    """
+    return {
+        "id": menu.id,
+        "title": menu.title,
+        "link": menu.link,
+        "icon": menu.icon,
+        "parent": menu.parent_id,
+        "level": menu.level,
+        "children": list()
+    }
+
+
+def remove_empty_children(menu_children_list: list[dict]):
+    """
+    去除空的children
+    :param menu_children_list: 菜单的children列表
+    :return: 去除空的children后的children列表
+    """
+    # 根据menu中的level字段进行排序
+    menu_children_list.sort(key=lambda m: m["level"])
+
+    for menu in menu_children_list:
+        if "children" in menu:
+            if menu["children"]:
+                remove_empty_children(menu["children"])
+            else:
+                del menu["children"]
+
+
+def build_menu(menus: list[dict]):
+    """
+    构建菜单
+    :param menus: 菜单列表
+    :return: 菜单树
+    """
+    menu_tree = list()
+    menu_node_dict = {menu['id']: menu for menu in menus}
+
+    for menu in menus:
+        if menu['parent']:
+            menu_node_dict[menu['parent']]['children'].append(menu)
+        else:
+            menu_tree.append(menu)
+
+    remove_empty_children(menu_tree)
+
+    return menu_tree
+
+
+async def get_menu_tree(permission_ids: list[int] = None) -> list[dict]:
+    """
+    获取菜单树
+    :param permission_ids: 权限id列表
+    :return: 菜单树
+    """
+    menu_list = list()
+    # 获取用户菜单的sql语句
+    if permission_ids:
+        select_menu_statement = select(Menu.id, Menu.title, Menu.link, Menu.icon, Menu.parent_id, Menu.level).join(Menu.permission, isouter=True) \
+            .where(or_(Permission.id.in_(permission_ids), Menu.all_access == True), Menu.status == ModelStatus.ACTIVE).distinct()
+    else:
+        select_menu_statement = select(Menu.id, Menu.title, Menu.link, Menu.icon, Menu.parent_id, Menu.level) \
+            .where(Menu.all_access == True, Menu.status == ModelStatus.ACTIVE)
+
+    async with sql_helper.get_session().begin() as session:
+        menus_queryset = (await session.execute(select_menu_statement)).all()
+    for menu in menus_queryset:
+        menu_list.append(format_menu_item(menu))
+
+    menu_parent_ids = {menu.parent_id for menu in menus_queryset if menu.parent_id}
+    while menu_parent_ids:
+        select_menu_parent_statement = select(Menu.id, Menu.title, Menu.link, Menu.icon, Menu.parent_id, Menu.level) \
+            .where(Menu.id.in_(menu_parent_ids), Menu.status == ModelStatus.ACTIVE)
+        async with sql_helper.get_session().begin() as session:
+            menus_queryset = (await session.execute(select_menu_parent_statement)).all()
+        for menu in menus_queryset:
+            menu_list.append(format_menu_item(menu))
+        menu_parent_ids = {menu.parent_id for menu in menus_queryset if menu.parent_id}
+
+    menu_tree = build_menu(menu_list)
+
+    return menu_tree
+
+
+async def get_permissions_and_menus_by_user_id(user_id: int) -> dict[str, list[str] | list[Menu]]:
+    """
+    通过用户id获取权限和菜单，菜单信息作为权限的一部分返回
     :param user_id: 用户id
     :return: 权限列表
     """
+    permissions = {method: list() for method in PermissionMethods.__members__.keys()}
+    permission_ids = list()
+    permissions["menus"] = list()
+
+    # 获取用户权限的sql语句
     select_permissions_statement = select(Permission.id, Permission.method, Permission.url).join(User.roles).join(Role.permissions) \
-        .where(User.id == user_id, Permission.status == ModelStatus.ACTIVE)
+        .where(User.id == user_id, Permission.status == ModelStatus.ACTIVE).distinct()
     async with sql_helper.get_session().begin() as session:
-        permissions = (await session.execute(select_permissions_statement)).all()
+        permission_queryset = (await session.execute(select_permissions_statement)).all()
+    for permission in permission_queryset:
+        permissions[permission.method.name].append(permission.url)
+        permission_ids.append(permission.id)
+
+    permissions["menus"] = await get_menu_tree(permission_ids)
+
+    # 只保留有权限的method
+    permissions = {key: permissions[key] for key in permissions if permissions[key]}
 
     return permissions
 
@@ -148,8 +246,6 @@ async def generate_token(form_data: OAuth2RequestForm, cache_client: CacheSystem
     response = Response[dict]()
     access_token = refresh_token = ""
     try:
-        # # 查找用户
-        # user = await User.filter(username=form_data.username).first()
         if settings.ENV == "product":
             # TODO 补齐获取权限的功能
             scopes = ""
@@ -195,14 +291,8 @@ async def generate_token(form_data: OAuth2RequestForm, cache_client: CacheSystem
                 subject=TokenType.REFRESH_TOKEN
             )
 
-            # 获取权限信息，然后存储到缓存中
-            permissions = dict()
-            for method in PermissionMethods.__members__.keys():
-                permissions[method] = list()
-
-            permission_queryset = await get_permissions_by_user_id(user.id)
-            for permission in permission_queryset:
-                permissions[permission.method.name].append(permission.url)
+            # 获取权限信息和菜单，然后存储到缓存中
+            permissions = await get_permissions_and_menus_by_user_id(user.id)
 
             # 如果权限为空，则删除该key，即空访问方法
             permissions = {method: json.dumps(permissions[method]) for method in permissions if permissions[method]}
@@ -298,7 +388,7 @@ async def refresh(payload: PayloadData = Depends(signature_authentication), cach
     response_model=Response,
     summary="登出接口，清除token"
 )
-async def logout(payload: PayloadData = Depends(signature_authentication), cache_client: CacheSystem = Depends(cache)):
+async def logout(payload: PayloadData = Depends(optional_signature_authentication), cache_client: CacheSystem = Depends(cache)):
     """
     登出接口，清除token
     \f
@@ -306,7 +396,37 @@ async def logout(payload: PayloadData = Depends(signature_authentication), cache
     :param cache_client: 缓存客户端
     :return:
     """
-    expire = payload.exp - timegm(datetime.utcnow().utctimetuple())
-    await cache_client.set_blacklist(identify=payload.data.id, value=payload.json(), expire=expire)
-    await cache_client.delete_permission(identify=payload.data.id)
-    return Response()
+    if payload.data:
+        expire = payload.exp - timegm(datetime.utcnow().utctimetuple())
+        await cache_client.set_blacklist(identify=payload.data.id, value=payload.json(), expire=expire)
+        await cache_client.delete_permission(identify=payload.data.id)
+    return Response[dict]()
+
+
+@router.get("/load_data", summary="加载数据", response_model=Response[LoadData])
+async def load_init_data(payload: PayloadData = Depends(optional_signature_authentication), cache_client: CacheSystem = Depends(cache)):
+    load_data = LoadData()
+    if payload.data:
+        menus = await cache_client.get_permission(payload.data.id, "menus")
+        load_data.menu = json.loads(menus) if menus else []
+    else:
+        anonymous_menus = await cache_client.get_anonymous_menus()
+        if anonymous_menus:
+            load_data.menu = json.loads(anonymous_menus)
+        else:
+            load_data.menu = await get_menu_tree()
+            await cache_client.set_anonymous_menus(json.dumps(load_data.menu))
+
+    return Response[LoadData](data=load_data)
+
+
+@router.get("/user/info", summary="获取用户信息", response_model=Response[UserInfo])
+async def get_user_info_handler(payload: PayloadData = Depends(signature_authentication)):
+    """
+    获取用户信息
+    \f
+    :param payload: token 负载数据
+    :return:
+    """
+    user_info = payload.data
+    return Response[UserInfo](data=user_info)

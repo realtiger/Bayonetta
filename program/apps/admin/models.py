@@ -69,11 +69,26 @@ class Permission(SiteBaseModel):
     method: Mapped[PermissionMethods] = mapped_column("method", Enum(PermissionMethods), default=PermissionMethods.GET, comment="权限请求方法")
 
     roles = relationship("Role", secondary="role_permission", back_populates="permissions")
+    menus = relationship("Menu", back_populates="permission")
 
     __table_args__ = (
         # 联合唯一索引
         UniqueConstraint("url", "method", name="url_method"),
     )
+
+
+# 菜单表
+class Menu(SiteBaseModel):
+    __tablename__ = "menu"
+
+    title: Mapped[str] = mapped_column("title", String(128), comment="菜单名称")
+    link: Mapped[str] = mapped_column("link", String(128), comment="菜单链接(前端路由)", default="#")
+    icon: Mapped[str] = mapped_column("icon", String(128), comment="菜单图标", default="")
+    parent_id: Mapped[int] = mapped_column("parent_id", BigInteger, ForeignKey("menu.id", ondelete="CASCADE"), comment="父菜单id", nullable=True)
+    permission_id: Mapped[int] = mapped_column("permission_id", BigInteger, ForeignKey("permission.id", ondelete="CASCADE"), comment="权限id", nullable=True)
+    all_access: Mapped[bool] = mapped_column("all_access", String(128), default=False, comment="是否所有人可见")
+
+    permission = relationship("Permission", back_populates="menus")
 
 
 # 操作记录
