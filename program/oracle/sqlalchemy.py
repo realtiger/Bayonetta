@@ -156,7 +156,7 @@ class SqlHelper:
 
     def init_orm(self) -> None:
         db_url = f"{settings.DB_ENGINE}://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_DATABASE}"
-        self.engine = create_async_engine(db_url, future=True, echo=settings.DB_ECHO)
+        self.engine = create_async_engine(db_url, future=True, echo=settings.DB_ECHO, pool_pre_ping=True, pool_recycle=3600)
         self.session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     def get_session(self) -> async_sessionmaker | None:

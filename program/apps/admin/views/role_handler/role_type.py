@@ -13,7 +13,7 @@ class RoleCreateData(BaseModel):
 # 单个更新格式
 class RoleUpdateData(RoleCreateData):
     level: int = Field(default=1, description="排序等级", title="排序等级", example=1, gt=0)
-    status: int = Field(default=ModelStatus.ACTIVE, description="数据状态", title="数据状态", example=ModelStatus.ACTIVE, gt=0)
+    status: str = Field(default=ModelStatus.ACTIVE, description="数据状态", title="数据状态", example=ModelStatus.ACTIVE)
 
 
 #  查询数据返回格式

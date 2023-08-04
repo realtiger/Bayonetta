@@ -25,7 +25,7 @@ class UserResetPasswordData(BaseModel):
 class UserUpdateData(BaseUserCreateAndUpdateData):
     superuser: bool = Field(default=None, description="是否是超级管理员", title="是否是超级管理员", example=False)
     level: int = Field(default=1, description="排序等级", title="排序等级", example=1, gt=0)
-    status: int = Field(default=ModelStatus.ACTIVE, description="数据状态", title="数据状态", example=ModelStatus.ACTIVE, gt=0)
+    status: str = Field(default=ModelStatus.ACTIVE, description="数据状态", title="数据状态", example=ModelStatus.ACTIVE)
 
 
 # 单个新建格式

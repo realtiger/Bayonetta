@@ -1,4 +1,4 @@
-from apps.admin.models import User
+from apps.admin.models import Role
 from apps.admin.views.role_handler.role_type import RoleQueryData, RoleCreateData, RoleUpdateData
 from oracle.sqlalchemy import SQLAlchemyCRUDRouter
 
@@ -9,7 +9,7 @@ class RoleCRUDRouter(SQLAlchemyCRUDRouter):
 
 router = RoleCRUDRouter(
     RoleQueryData,
-    User,
+    Role,
     RoleCreateData,
     RoleUpdateData,
     tags=['role'],

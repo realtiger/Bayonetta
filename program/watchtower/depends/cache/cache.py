@@ -20,10 +20,6 @@ def get_blacklist_key(identify: str) -> str:
     return f'blacklist_{identify}'
 
 
-def get_anonymous_menus_key() -> str:
-    return 'anonymous_menus'
-
-
 class CacheSystem:
     def __init__(self, backend):
         self.backend = backend
@@ -127,12 +123,6 @@ class CacheSystem:
 
     async def delete_blacklist(self, identify: int | str):
         return await self.delete(get_blacklist_key(str(identify)))
-
-    async def set_anonymous_menus(self, value: str, expire: int = 180):
-        return await self.set(get_anonymous_menus_key(), value, expire)
-
-    async def get_anonymous_menus(self):
-        return await self.get(get_anonymous_menus_key())
 
 
 # TODO 目前只有redis，后续可以扩展
