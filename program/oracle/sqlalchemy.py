@@ -5,7 +5,7 @@ from typing import Type, Any, Callable, Generator, Coroutine, Sequence, Optional
 
 from fastapi import Depends, Query, Body
 from pydantic import create_model
-from sqlalchemy import select, func, Enum, DateTime, Select, desc, asc, delete, update, MetaData, BigInteger
+from sqlalchemy import select, func, Enum, DateTime, Select, desc, asc, delete, update, MetaData, BigInteger, Update
 from sqlalchemy.exc import IntegrityError, MultipleResultsFound, NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.declarative import DeclarativeMeta as Model
@@ -15,6 +15,7 @@ from oracle.crud_base import CRUDGenerator, get_pk_type
 from oracle.snowflake import snow
 from oracle.types import DEPENDENCIES, PYDANTIC_SCHEMA as SCHEMA, PAGINATION, ModelStatus, T, ITEM_NOT_FOUND_CODE, MULTIPLE_RESULTS_FOUND_CODE, PRIMARY_KEY_EXISTED_CODE, \
     CREATE_FAILED_CODE, UPDATE_FAILED_CODE, DELETE_FAILED_CODE
+from oracle.utils import is_superuser
 from watchtower import PayloadData, optional_signature_authentication, Response, SiteException
 from watchtower.settings import logger, settings
 from watchtower.status.global_status import StatusMap
@@ -304,6 +305,12 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                     description="order field, if reverse add prefix '-' as '-id'",
                     example=["-id", "status"]
                 ),
+                ids: list[int] = Query(
+                    default=[],
+                    title="id params",
+                    description="id list",
+                    example=[1, 2, 3]
+                ),
                 payload: PayloadData | None = Depends(optional_signature_authentication)
         ) -> Response[GetAllData]:
             filters_dict = {}
@@ -317,14 +324,10 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             if not orders:
                 orders = [getattr(self.db_model, self._primary_key).name]
 
-            # TODO 权限判断，这里只是简单的判断是否有管理员字段
-            # 现有阶段只判断"status:all"是否存在，后续可根据需求扩展
-            # 生成token时，如果是超级用户，会主动将"status:all"加入scopes中
-            # 如果是普通用户，只能查看status为active的数据
-            if payload is None or "status:all" not in payload.scopes:
+            if not await is_superuser(payload):
                 filters_dict['status'] = ModelStatus.ACTIVE.value
 
-            all_records, count_records, pagination = await self._orm_get_all(pagination, filters_dict, orders)
+            all_records, count_records, pagination = await self._orm_get_all(pagination, filters_dict, orders, ids)
 
             pagination_data = PaginationData(index=pagination.index, limit=pagination.limit, total=count_records, offset=pagination.offset)
             data = GetAllData(items=all_records, pagination=pagination_data).dict()
@@ -335,10 +338,10 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         return route
 
     def _create(self, *args: Any, **kwargs: Any) -> RESPONSE_CALLABLE:
-        async def route(model: self.create_schema) -> Response[self.schema]:  # type: ignore
+        async def route(model: self.create_schema, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
             async with self.db_func().begin() as session:
                 try:
-                    model_dict = self._create_validator(model.dict())
+                    model_dict = await self._create_validator(model.dict())
 
                     db_model_data = {}
                     for key in self.db_model.__table__.columns.keys():
@@ -379,7 +382,8 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
     def _delete_all(self, *args: Any, **kwargs: Any) -> RESPONSE_CALLABLE_LIST:
         async def route(
-                item_ids: list[self._primary_key_type] = Body(default=None, title="id list", description="delete item's id list", example=[1, 2, 3])  # type: ignore
+                item_ids: list[self._primary_key_type] = Body(default=None, title="id list", description="delete item's id list", example=[1, 2, 3], ),  # type: ignore
+                payload: PayloadData | None = Depends(optional_signature_authentication)
         ) -> Response[GetAllData]:  # type: ignore
             all_records, count, pagination = await self._orm_get_all_by_ids(item_ids)
             delete_statement = delete(self.db_model).filter(getattr(self.db_model, self._primary_key).in_(item_ids)).returning(self.db_model)
@@ -397,7 +401,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         return route
 
     def _get_one(self, *args: Any, **kwargs: Any) -> RESPONSE_CALLABLE:
-        async def route(item_id: self._primary_key_type) -> Response[self.schema]:  # type: ignore
+        async def route(item_id: self._primary_key_type, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
             model = await self._orm_get_one(item_id)
 
             response = Response[self.schema]()
@@ -407,10 +411,14 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         return route
 
     def _update(self, *args: Any, **kwargs: Any) -> RESPONSE_CALLABLE:
-        async def route(item_id: self._primary_key_type, model: self.update_schema) -> Response[self.schema]:  # type: ignore
+        async def route(
+                item_id: self._primary_key_type,  # type: ignore
+                model: self.update_schema,  # type: ignore
+                payload: PayloadData | None = Depends(optional_signature_authentication)
+        ) -> Response[self.schema]:  # type: ignore
             # 只获取更新后的字段
             data = model.dict(exclude_unset=True, exclude={self._primary_key})
-            update_statement = update(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).values(**data)
+            update_statement = await self._orm_update_statement(item_id, data, payload)
 
             async with self.db_func().begin() as session:
                 try:
@@ -437,7 +445,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         return route
 
     def _delete_one(self, *args, **kwargs) -> RESPONSE_CALLABLE:
-        async def route(item_id: self._primary_key_type) -> Response[self.schema]:  # type: ignore
+        async def route(item_id: self._primary_key_type, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
             result = await self._orm_get_one(item_id)
             data = self._format_query_data(result)
             delete_statement = delete(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).returning(self.db_model)
@@ -457,7 +465,13 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         return route
 
-    async def _orm_get_all(self, pagination: PAGINATION = None, filters: dict[str, str] = None, orders: list[str] = None) -> tuple[Sequence, int, PAGINATION]:
+    async def _orm_get_all(
+            self,
+            pagination: PAGINATION = None,
+            filters: dict[str, str] = None,
+            orders: list[str] = None,
+            ids: list[int] = None
+    ) -> tuple[Sequence, int, PAGINATION]:
         if pagination is None:
             pagination = self.pagination()
         if filters is None:
@@ -467,7 +481,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         orders_formatter = self._order_formatter(orders)
 
-        all_statement, count_statement = self._orm_get_all_statement(pagination, filters, orders_formatter)
+        all_statement, count_statement = self._orm_get_all_statement(pagination, filters, orders_formatter, ids)
 
         async with self.db_func().begin() as session:
             all_records = list()
@@ -508,7 +522,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 raise SiteException(status_code=ITEM_NOT_FOUND_CODE, response=response) from None
         return model
 
-    def _orm_get_all_statement(self, pagination: PAGINATION, filters: dict[str, str], orders: list) -> tuple[Select, Select]:
+    def _orm_get_all_statement(self, pagination: PAGINATION, filters: dict[str, str], orders: list, ids: list[int]) -> tuple[Select, Select]:
         # query count statement
         count_statement = select(func.count()).select_from(self.db_model).filter_by(**filters)
         _, foreign_key_columns = self._get_columns()
@@ -516,6 +530,9 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         # query all statement
         # all_statement = select(*columns).select_from(self.db_model).filter_by(**filters).order_by(*orders).offset(pagination.offset).limit(pagination.limit)
         all_statement = select(self.db_model).filter_by(**filters).order_by(*orders).offset(pagination.offset).limit(pagination.limit)
+
+        if ids:
+            all_statement = all_statement.where(getattr(self.db_model, self._primary_key).in_(ids))
 
         for column in foreign_key_columns:
             all_statement = all_statement.join(column, isouter=True).options(selectinload(column))
@@ -531,6 +548,15 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         for column in foreign_key_columns:
             statement = statement.join(column, isouter=True).options(selectinload(column))
 
+        return statement
+
+    async def _orm_can_update_status(self, payload: PayloadData | None = None) -> bool:
+        return await is_superuser(payload)
+
+    async def _orm_update_statement(self, item_id: int, data: dict, payload: PayloadData | None = None) -> Update:
+        if not await self._orm_can_update_status(payload):
+            data.pop("status")
+        statement = update(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).values(**data)
         return statement
 
     def _get_columns(self) -> tuple[list, list]:
@@ -612,7 +638,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         return orders_formatter
 
-    def _create_validator(self, item: dict) -> dict:
+    async def _create_validator(self, item: dict) -> dict:
         """
         校验创建数据， 返回校验后的数据
         :param item:

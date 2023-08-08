@@ -185,6 +185,8 @@ async def generate_token(form_data: OAuth2RequestForm, cache_client: CacheSystem
 
             # 如果权限为空，则删除该key，即空访问方法
             permissions = {method: json.dumps(permissions[method]) for method in permissions if permissions[method]}
+            # 是否是超级管理员的信息也存储到权限信息中
+            permissions["superuser"] = json.dumps([user.superuser])
 
             await cache_client.set_permission(identify=user.id, permissions=permissions, expire=expires_delta if expires_delta else settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
 

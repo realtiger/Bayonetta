@@ -103,12 +103,13 @@ class Settings(BaseSettings):
     WEB_VERSION: str = DOCS_VERSION
     WEB_WHITE_TABLE: dict[str, list[str]] = {
         'GET': [
-            '/api/admin/logout/',
-            '/api/admin/app-data/'
+            '/api/logout',
+            '/api/load_data',
+            '/api/user/info',
         ],
         'POST': [
-            '/api/admin/login/',
-            '/api/admin/auth/refresh/'
+            '/api/login',
+            '/api/refresh'
         ]
     }
 

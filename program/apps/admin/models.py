@@ -1,7 +1,7 @@
 import datetime
 import enum
 
-from sqlalchemy import String, BigInteger, ForeignKey, UniqueConstraint, Enum
+from sqlalchemy import String, BigInteger, ForeignKey, UniqueConstraint, Enum, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from oracle.sqlalchemy import SiteBaseModel, ModelBase
@@ -54,7 +54,7 @@ class User(SiteBaseModel):
     avatar: Mapped[str] = mapped_column("avatar", String(128), default="", comment="头像信息，记录头像的url值")
     detail: Mapped[str] = mapped_column("detail", String(128), default="", comment="用户简介，将要介绍用户")
     email: Mapped[str] = mapped_column("email", String(128), unique=True, comment="用户邮箱")
-    superuser: Mapped[bool] = mapped_column("superuser", String(128), default=False, comment="是否是超级管理员")
+    superuser: Mapped[bool] = mapped_column("superuser", Boolean, default=False, comment="是否是超级管理员")
     last_login_ip: Mapped[str] = mapped_column("last_login_ip", String(128), comment="最近一次登录ip", default="0.0.0.0")
     last_login_time: Mapped[str] = mapped_column("last_login_time", String(128), comment="最近一次登录时间", default=datetime.datetime.now)
 
