@@ -355,23 +355,20 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         return super().api_route(path, methods=methods, *args, **kwargs)
 
     def get(self, path: str, *args, **kwargs) -> Callable[[DecoratedCallable], DecoratedCallable]:
-        # 将生成的路由取消，使用指定的路由
-        self.remove_api_route(path, ['GET'])
-        return super().get(path, *args, **kwargs)
+        method = ['GET']
+        return self.api_route(path, method, *args, **kwargs)
 
     def post(self, path: str, *args, **kwargs) -> Callable[[DecoratedCallable], DecoratedCallable]:
-        # 将生成的路由取消，使用指定的路由
-        self.remove_api_route(path, ['POST'])
-        return super().post(path, *args, **kwargs)
+        method = ['POST']
+        return self.api_route(path, method, *args, **kwargs)
 
     def put(self, path: str, *args, **kwargs) -> Callable[[DecoratedCallable], DecoratedCallable]:
-        self.remove_api_route(path, ['PUT'])
-        return super().put(path, *args, **kwargs)
+        method = ['PUT']
+        return self.api_route(path, method, *args, **kwargs)
 
     def delete(self, path: str, *args, **kwargs) -> Callable[[DecoratedCallable], DecoratedCallable]:
-        # 将生成的路由取消，使用指定的路由
-        self.remove_api_route(path, ['DELETE'])
-        return super().delete(path, *args, **kwargs)
+        method = ['DELETE']
+        return self.api_route(path, method, *args, **kwargs)
 
     def remove_api_route(self, path: str, methods: list[str]):
         methods = set(methods)

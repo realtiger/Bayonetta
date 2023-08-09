@@ -1,3 +1,5 @@
+import json
+
 from fastapi import status
 
 from watchtower.depends.cache.backend.redis_backend import get_redis
@@ -92,9 +94,13 @@ class CacheSystem:
             raise CACHE_SYSTEM_EXCEPTION from e
 
     # ##### 纯自定义，和项目耦合 #####
-    async def set_permission(self, identify: int | str, permissions: dict, expire: int = 60):
+    async def set_permission(self, identify: int | str, permissions: dict, expire: int = 60, encode: bool = True):
         if len(permissions) == 0:
             return 'OK'
+
+        if encode:
+            permissions = {k: json.dumps(v) for k, v in permissions.items()}
+
         permission_key = get_permission_key(str(identify))
         # 先删除原有的key，保证数据一致性，并且重新设置过期时间
         await self.hash_delete(permission_key)
@@ -102,14 +108,20 @@ class CacheSystem:
         await self.set_expire(permission_key, expire)
         return data
 
-    async def get_permission(self, identify: int | str, fields: list | str):
+    async def get_permission(self, identify: int | str, fields: list | str, decode: bool = True):
         if not fields:
             return None
 
         if isinstance(fields, str):
             permissions = await self.hash_get(get_permission_key(str(identify)), fields)
+            if decode and permissions:
+                permissions = json.loads(permissions)
         else:
             permissions = await self.hash_multi_get(get_permission_key(str(identify)), fields)
+            if decode and permissions:
+                permissions = [json.loads(p) if p else None for p in permissions]
+
+        # permissions 是一个 list[{ 'id': int, 'url': str, 'code': str}] 格式的数据
         return permissions
 
     async def delete_permission(self, identify: int | str):

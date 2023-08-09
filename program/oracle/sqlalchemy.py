@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Type, Any, Callable, Generator, Coroutine, Sequence, Optional
 
 from fastapi import Depends, Query, Body
+from fastapi.types import DecoratedCallable
 from pydantic import create_model
 from sqlalchemy import select, func, Enum, DateTime, Select, desc, asc, delete, update, MetaData, BigInteger, Update
 from sqlalchemy.exc import IntegrityError, MultipleResultsFound, NoResultFound
@@ -14,7 +15,7 @@ from sqlalchemy.orm import ColumnProperty, RelationshipProperty, DeclarativeBase
 from oracle.crud_base import CRUDGenerator, get_pk_type
 from oracle.snowflake import snow
 from oracle.types import DEPENDENCIES, PYDANTIC_SCHEMA as SCHEMA, PAGINATION, ModelStatus, T, ITEM_NOT_FOUND_CODE, MULTIPLE_RESULTS_FOUND_CODE, PRIMARY_KEY_EXISTED_CODE, \
-    CREATE_FAILED_CODE, UPDATE_FAILED_CODE, DELETE_FAILED_CODE
+    CREATE_FAILED_CODE, UPDATE_FAILED_CODE, DELETE_FAILED_CODE, ONLY_SUPERUSER_CODE
 from oracle.utils import is_superuser
 from watchtower import PayloadData, optional_signature_authentication, Response, SiteException
 from watchtower.settings import logger, settings
@@ -26,12 +27,31 @@ Session = Callable[..., Generator[AsyncSession, Any, None]]
 RESPONSE_CALLABLE = Callable[..., Coroutine[Any, Any, Response]]
 RESPONSE_CALLABLE_LIST = Callable[..., Coroutine[Any, Any, Response[GetAllData]]]
 
+OnlySuper = generate_response_model("OnlySuperuser", StatusMap.ONLY_SUPERUSER)
 ItemNotFound = generate_response_model("ItemNotFound", StatusMap.ITEM_NOT_FOUND)
 MultipleResults = generate_response_model("MultipleResults", StatusMap.MULTIPLE_RESULTS_FOUND)
 PrimaryKeyExisted = generate_response_model("PrimaryKeyExisted", StatusMap.PRIMARY_KEY_EXISTED)
 CreateFailed = generate_response_model("CreateFailed", StatusMap.CREATE_FAILED)
 UpdateFailed = generate_response_model("UpdateFailed", StatusMap.UPDATE_FAILED)
 DeleteFailed = generate_response_model("DeleteFailed", StatusMap.DELETE_FAILED)
+
+# 为其他请求预留响应模式
+ONLY_SUPERUSER_RESPONSE = {
+    ONLY_SUPERUSER_CODE: {
+        "model": OnlySuper,
+        "description": "只有超级用户才能访问",
+        "content": {
+            "application/json": {
+                "example": {
+                    "code": StatusMap.ONLY_SUPERUSER.code,
+                    "success": StatusMap.ONLY_SUPERUSER.success,
+                    "message": StatusMap.ONLY_SUPERUSER.message,
+                    "data": {}
+                }
+            }
+        }
+    }
+}
 
 ITEM_NOT_FOUND_RESPONSE = {
     ITEM_NOT_FOUND_CODE: {
@@ -289,6 +309,16 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         super()._add_api_route(path, endpoint, dependencies, methods, response_model, summary, description, responses, **kwargs)
 
+    def api_route(
+            self,
+            path: str,
+            methods: list[str] = None,
+            response_model: Sequence[Type[T]] | Type[T] | None = None,
+            *args,
+            **kwargs) -> Callable[[DecoratedCallable], DecoratedCallable]:
+        response_model = Response[response_model]
+        return super().api_route(path, methods, response_model=response_model, *args, **kwargs)
+
     # ##### 操作数据库 #####
     def _get_all(self, *args: Any, **kwargs: Any) -> RESPONSE_CALLABLE_LIST:
         async def route(
@@ -419,24 +449,24 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             # 只获取更新后的字段
             data = model.dict(exclude_unset=True, exclude={self._primary_key})
             update_statement = await self._orm_update_statement(item_id, data, payload)
-
-            async with self.db_func().begin() as session:
-                try:
-                    await session.execute(update_statement)
-                    await session.commit()
-                except Exception as error:
-                    await session.rollback()
-                    result = re.match(r".*Duplicate entry '(.*)' for key '(.*)'.*", error.args[0])
-                    if result:
-                        key = "".join(result.group(2).split("_@_")[2:])
-                        value = result.group(1)
-                        response = Response[dict](status=Status(StatusMap.PRIMARY_KEY_EXISTED.code, f"字段{key}的值{value}已存在"))
-                        raise SiteException(status_code=PRIMARY_KEY_EXISTED_CODE, response=response) from None
-                    logger.error(f"update {self.db_model.__name__} error: {error}")
-                    raise SiteException(status_code=UPDATE_FAILED_CODE, response=Response[dict](status=StatusMap.UPDATE_FAILED)) from None
+            if not update_statement is None:
+                async with self.db_func().begin() as session:
+                    try:
+                        await session.execute(update_statement)
+                        await session.commit()
+                    except Exception as error:
+                        await session.rollback()
+                        result = re.match(r".*Duplicate entry '(.*)' for key '(.*)'.*", error.args[0])
+                        if result:
+                            key = "".join(result.group(2).split("_@_")[2:])
+                            value = result.group(1)
+                            response = Response[dict](status=Status(StatusMap.PRIMARY_KEY_EXISTED.code, f"字段{key}的值{value}已存在"))
+                            raise SiteException(status_code=PRIMARY_KEY_EXISTED_CODE, response=response) from None
+                        logger.error(f"update {self.db_model.__name__} error: {error}")
+                        raise SiteException(status_code=UPDATE_FAILED_CODE, response=Response[dict](status=StatusMap.UPDATE_FAILED)) from None
 
             db_model = await self._orm_get_one(item_id)
-            data = self._format_query_data(db_model)
+            data = self.format_query_data(db_model)
 
             response = Response[self.schema]()
             response.update(data=data)
@@ -447,7 +477,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
     def _delete_one(self, *args, **kwargs) -> RESPONSE_CALLABLE:
         async def route(item_id: self._primary_key_type, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
             result = await self._orm_get_one(item_id)
-            data = self._format_query_data(result)
+            data = self.format_query_data(result)
             delete_statement = delete(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).returning(self.db_model)
 
             async with self.db_func().begin() as session:
@@ -488,7 +518,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             # execute the statement
             all_records_data = (await session.execute(all_statement)).scalars().all()
             for row in all_records_data:
-                all_records.append(self._format_query_data(row))
+                all_records.append(self.format_query_data(row))
             count_records = (await session.execute(count_statement)).scalar()
         return all_records, count_records, pagination
 
@@ -504,7 +534,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             # execute the statement
             all_records_data = (await session.execute(all_statement_by_ids)).scalars().all()
             for row in all_records_data:
-                all_records.append(self._format_query_data(row))
+                all_records.append(self.format_query_data(row))
         return all_records, len(all_records), PAGINATION()
 
     async def _orm_get_one(self, item_id) -> Model:
@@ -515,21 +545,21 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 model = await session.execute(statement)
                 model = model.scalar_one()
             except MultipleResultsFound:
-                response = Response[dict](status=StatusMap.MULTIPLE_RESULTS_FOUND, data={"message": "Multiple results found"})
+                response = Response[dict](status=StatusMap.MULTIPLE_RESULTS_FOUND)
                 raise SiteException(status_code=MULTIPLE_RESULTS_FOUND_CODE, response=response) from None
             except NoResultFound:
-                response = Response[dict](status=StatusMap.ITEM_NOT_FOUND, data={"message": "Item not found"})
+                response = Response[dict](status=StatusMap.ITEM_NOT_FOUND)
                 raise SiteException(status_code=ITEM_NOT_FOUND_CODE, response=response) from None
         return model
 
     def _orm_get_all_statement(self, pagination: PAGINATION, filters: dict[str, str], orders: list, ids: list[int]) -> tuple[Select, Select]:
         # query count statement
-        count_statement = select(func.count()).select_from(self.db_model).filter_by(**filters)
+        count_statement = select(func.count()).select_from(self.db_model).filter_by(**filters).distinct()
         _, foreign_key_columns = self._get_columns()
 
         # query all statement
         # all_statement = select(*columns).select_from(self.db_model).filter_by(**filters).order_by(*orders).offset(pagination.offset).limit(pagination.limit)
-        all_statement = select(self.db_model).filter_by(**filters).order_by(*orders).offset(pagination.offset).limit(pagination.limit)
+        all_statement = select(self.db_model).filter_by(**filters).order_by(*orders).offset(pagination.offset).limit(pagination.limit).distinct()
 
         if ids:
             all_statement = all_statement.where(getattr(self.db_model, self._primary_key).in_(ids))
@@ -546,16 +576,19 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         statement = select(self.db_model).filter_by(**filters)
 
         for column in foreign_key_columns:
-            statement = statement.join(column, isouter=True).options(selectinload(column))
+            statement = statement.join(column, isouter=True).options(selectinload(column)).distinct()
 
         return statement
 
     async def _orm_can_update_status(self, payload: PayloadData | None = None) -> bool:
         return await is_superuser(payload)
 
-    async def _orm_update_statement(self, item_id: int, data: dict, payload: PayloadData | None = None) -> Update:
-        if not await self._orm_can_update_status(payload):
+    async def _orm_update_statement(self, item_id: int, data: dict, payload: PayloadData | None = None) -> Update | None:
+        if not await self._orm_can_update_status(payload) and "status" in data:
             data.pop("status")
+        if not data:
+            return
+
         statement = update(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).values(**data)
         return statement
 
@@ -571,7 +604,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                     foreign_key_columns.append(db_model_field)
         return common_columns, foreign_key_columns
 
-    def _format_query_data(self, row) -> dict:
+    def format_query_data(self, row) -> dict:
         """
         格式化查询数据，单条数据格式化
         :param row: 每一行数据
@@ -599,8 +632,9 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             add_key_exist: bool = False,
             add_create_fail: bool = False,
             add_update_fail: bool = False,
-            add_delete_fail: bool = False
-    ) -> tuple[str, str, dict, Any]:
+            add_delete_fail: bool = False,
+            return_type: str = None
+    ) -> tuple[str, str, dict, Any] | dict[str, Any]:
         if not isinstance(params, dict):
             params = {}
 
@@ -624,6 +658,13 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         if add_delete_fail:
             responses.update(DELETE_FAILED_RESPONSE)
 
+        if return_type == 'dict':
+            return {
+                'summary': params.get('summary', summary),
+                'description': params.get('description', description),
+                'responses': responses,
+                'response_model': params.get('response_model')
+            }
         return params.get('summary', summary), params.get('description', description), responses, params.get('response_model')
 
     def _order_formatter(self, orders: [str]) -> list:

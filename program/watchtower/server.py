@@ -149,7 +149,9 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError):
     message = ''
     if errors and isinstance(errors, list):
         data = errors[0]
-        message = f"字段 {data['loc'][1]} 不合法 => {data['msg']}"
+        field = len(data['loc']) > 1 and data['loc'][1] or data['loc'][0]
+        msg = data['msg']
+        message = f"字段 {field} 不合法 => {msg}"
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         # content=jsonable_encoder({"detail": exc.errors(), "Error": "Name field is missing"}),

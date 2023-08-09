@@ -144,12 +144,10 @@ async def signature_authentication(
             return payload
 
     # 获取权限缓存
-    permissions = await cache_client.get_permission(payload.data.id, [method])
-    if isinstance(permissions, str):
-        permissions = json.loads(permissions)
+    permissions = await cache_client.get_permission(payload.data.id, method)
 
-    for url_reg in permissions:
-        url_reg = f"^{url_reg}$"
+    for permission in permissions:
+        url_reg = f"^{permission.get('url')}$"
 
         if re.match(url_reg, path):
             return payload

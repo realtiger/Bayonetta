@@ -1,8 +1,5 @@
-import json
-
 from watchtower import PayloadData
 from watchtower.depends.cache.cache import cache as cache_client
-from watchtower.settings import logger
 
 
 async def is_superuser(payload: PayloadData | None) -> bool:
@@ -14,16 +11,8 @@ async def is_superuser(payload: PayloadData | None) -> bool:
         return False
 
     is_superuser_value = await cache_client.get_permission(payload.data.id, 'superuser')
-    if not is_superuser_value:
-        return False
-
-    try:
-        is_superuser_value = json.loads(is_superuser_value)
-        is_superuser_value = is_superuser_value[0]
-        if isinstance(is_superuser_value, bool):
-            return is_superuser_value
-        else:
-            raise ValueError
-    except Exception as e:
-        logger.error(f'is_superuser_value error: {e}')
+    is_superuser_value = is_superuser_value[0] if isinstance(is_superuser_value, list) else False
+    if isinstance(is_superuser_value, bool):
+        return is_superuser_value
+    else:
         return False

@@ -1,4 +1,3 @@
-import json
 from calendar import timegm
 from datetime import timedelta, datetime
 
@@ -116,7 +115,11 @@ async def get_permissions_by_user_id(user_id: int) -> dict[str, list[str]]:
         permission_queryset = (await session.execute(select_permissions_statement)).all()
 
     for permission in permission_queryset:
-        permissions[permission.method.name].append(permission.code)
+        permissions[permission.method.name].append({
+            "id": permission.id,
+            "url": permission.url,
+            "code": permission.code
+        })
 
     return permissions
 
@@ -184,9 +187,9 @@ async def generate_token(form_data: OAuth2RequestForm, cache_client: CacheSystem
             permissions = await get_permissions_by_user_id(user.id)
 
             # 如果权限为空，则删除该key，即空访问方法
-            permissions = {method: json.dumps(permissions[method]) for method in permissions if permissions[method]}
+            permissions = {method: permissions[method] for method in permissions if permissions[method]}
             # 是否是超级管理员的信息也存储到权限信息中
-            permissions["superuser"] = json.dumps([user.superuser])
+            permissions["superuser"] = [user.superuser]
 
             await cache_client.set_permission(identify=user.id, permissions=permissions, expire=expires_delta if expires_delta else settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
 
@@ -305,9 +308,14 @@ async def load_init_data(request: Request, payload: PayloadData = Depends(option
     if payload.data:
         load_data.auth = True
         methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+        # permission是 list[{ 'id': int, 'url': str, 'code': str}] 的形式
         permissions = await cache_client.get_permission(payload.data.id, methods)
         if permissions:
-            load_data.permissions = {method: json.loads(permission) for method, permission in zip(methods, permissions) if permission}
+            for index in range(len(methods)):
+                method = methods[index]
+                permission = permissions[index]
+                if permission:
+                    load_data.permissions[method] = [p.get('code') for p in permission]
     else:
         load_data.permissions = {}
         load_data.auth = False
