@@ -111,6 +111,28 @@ if settings.DB_ENABLE:
     # sql_helper.register_sqlalchemy(app, DATABASE_URL, async_mode=True)
 
 
+@app.on_event("startup")
+async def startup_event():
+    try:
+        from apps.on_event import on_startup
+        await on_startup()
+    except ImportError:
+        pass
+
+    logger.info("项目启动成功")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    try:
+        from apps.on_event import on_shutdown
+        await on_shutdown()
+    except ImportError:
+        pass
+
+    logger.info("项目关闭成功")
+
+
 @app.exception_handler(SiteException)
 async def unicorn_site_exception_handle(_: Request, exc: SiteException):
     return JSONResponse(

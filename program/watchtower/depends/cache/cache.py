@@ -22,6 +22,12 @@ def get_blacklist_key(identify: str) -> str:
     return f'blacklist_{identify}'
 
 
+def get_menu_key(identify: str = None) -> str:
+    if identify is None:
+        return 'global_menu'
+    return f'menu_{identify}'
+
+
 class CacheSystem:
     def __init__(self, backend):
         self.backend = backend
@@ -135,6 +141,18 @@ class CacheSystem:
 
     async def delete_blacklist(self, identify: int | str):
         return await self.delete(get_blacklist_key(str(identify)))
+
+    async def get_menu(self, identify: int | str = None, decode: bool = True):
+        menu = await self.get(get_menu_key(None if identify is None else str(identify)))
+        if decode and menu:
+            menu = json.loads(menu)
+        return menu
+
+    async def set_menu(self, identify: int | str = None, value: str = '', encode: bool = True):
+        if encode:
+            value = json.dumps(value)
+
+        return await self.set(get_menu_key(None if identify is None else str(identify)), value, expire=7 * 24 * 3600)
 
 
 # TODO 目前只有redis，后续可以扩展

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import Field, BaseModel
 
-from oracle.types import QueryBaseModel, ModelStatus
+from oracle.types import QueryBaseModel, UpdateAddFields
 
 
 # ### 数据格式定义 ###
@@ -22,10 +22,8 @@ class UserResetPasswordData(BaseModel):
 
 
 # 单个更新格式
-class UserUpdateData(BaseUserCreateAndUpdateData):
+class UserUpdateData(BaseUserCreateAndUpdateData, UpdateAddFields):
     superuser: bool = Field(default=None, description="是否是超级管理员", title="是否是超级管理员", example=False)
-    level: int = Field(default=1, description="排序等级", title="排序等级", example=1, gt=0)
-    status: str = Field(default=ModelStatus.ACTIVE, description="数据状态", title="数据状态", example=ModelStatus.ACTIVE)
 
 
 # 单个新建格式

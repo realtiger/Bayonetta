@@ -217,7 +217,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             create_route: bool | DEPENDENCIES = True,
             update_route: bool | DEPENDENCIES = True,
             delete_one_route: bool | DEPENDENCIES = True,
-            delete_all_route: bool | DEPENDENCIES = True,
+            delete_all_route: bool | DEPENDENCIES = False,
             get_all_route_params: dict | None = None,
             get_one_route_params: dict | None = None,
             create_route_params: dict | None = None,
@@ -371,6 +371,8 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         async def route(model: self.create_schema, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
             async with self.db_func().begin() as session:
                 try:
+                    if hasattr(self, '_pre_create'):
+                        model = await self._pre_create(model)
                     model_dict = await self._create_validator(model.dict())
 
                     db_model_data = {}
@@ -403,9 +405,14 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                     response = Response[dict](status=StatusMap.CREATE_FAILED)
                     raise SiteException(status_code=CREATE_FAILED_CODE, response=response) from None
             response = Response[self.schema]()
+            model = await self._orm_get_one(db_model.id)
+
+            if hasattr(self, '_post_create'):
+                model = await self._post_create(model)
+
             # 这里会把 Model 类型自动转换为 schema 类型
             # 直接使用 return Response[self.schema](data=db_model) 编辑器会发出警告，因此先赋值再返回
-            response.update(data=db_model)
+            response.update(data=model)
             return response
 
         return route
@@ -447,8 +454,10 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 payload: PayloadData | None = Depends(optional_signature_authentication)
         ) -> Response[self.schema]:  # type: ignore
             # 只获取更新后的字段
-            data = model.dict(exclude_unset=True, exclude={self._primary_key})
-            update_statement = await self._orm_update_statement(item_id, data, payload)
+            model = model.dict(exclude_unset=True, exclude={self._primary_key})
+            if hasattr(self, '_pre_update'):
+                model = await self._pre_update(model)
+            update_statement = await self._orm_update_statement(item_id, model, payload)
             if not update_statement is None:
                 async with self.db_func().begin() as session:
                     try:
@@ -468,6 +477,9 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             db_model = await self._orm_get_one(item_id)
             data = self.format_query_data(db_model)
 
+            if hasattr(self, '_post_update'):
+                data = await self._post_update(data)
+
             response = Response[self.schema]()
             response.update(data=data)
             return response
@@ -478,6 +490,10 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         async def route(item_id: self._primary_key_type, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
             result = await self._orm_get_one(item_id)
             data = self.format_query_data(result)
+
+            if hasattr(self, '_pre_delete'):
+                data = await self._pre_delete(data)
+
             delete_statement = delete(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).returning(self.db_model)
 
             async with self.db_func().begin() as session:
@@ -488,6 +504,9 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                     await session.rollback()
                     logger.error(f"delete {self.db_model.__name__} error: {error}")
                     raise SiteException(status_code=DELETE_FAILED_CODE, response=Response[dict](status=StatusMap.DELETE_FAILED)) from None
+
+            if hasattr(self, '_post_delete'):
+                data = await self._post_delete(data)
 
             response = Response[self.schema]()
             response.update(data=data)
@@ -558,7 +577,6 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         _, foreign_key_columns = self._get_columns()
 
         # query all statement
-        # all_statement = select(*columns).select_from(self.db_model).filter_by(**filters).order_by(*orders).offset(pagination.offset).limit(pagination.limit)
         all_statement = select(self.db_model).filter_by(**filters).order_by(*orders).offset(pagination.offset).limit(pagination.limit).distinct()
 
         if ids:
@@ -566,8 +584,6 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         for column in foreign_key_columns:
             all_statement = all_statement.join(column, isouter=True).options(selectinload(column))
-
-        # all_statement = all_statement.filter_by(**filters).order_by(*orders).offset(pagination.offset).limit(pagination.limit)
 
         return all_statement, count_statement
 

@@ -43,6 +43,11 @@ class QueryBaseModel(BaseModel):
     update_time: datetime = Field(default=datetime.now(), description="修改时间", title="修改时间", example="2022-11-17T11:23:22.084108")
 
 
+class UpdateAddFields(BaseModel):
+    level: int = Field(default=1, description="排序等级", title="排序等级", example=1, gt=0)
+    status: str = Field(default=ModelStatus.ACTIVE, description="数据状态", title="数据状态", example=ModelStatus.ACTIVE)
+
+
 class DeleteData(BaseModel):
     count: int = Field(default=0, description="删除的数据量", title="数据量", example=10)
     identifiers: list = Field(default=[], description="删除的数据索引", title="数据索引", example=[1, 2, 3])
