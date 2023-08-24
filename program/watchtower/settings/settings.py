@@ -129,6 +129,8 @@ class Settings(BaseSettings):
     DB_ECHO: bool = True
     # DB_USE_TZ: bool = False
     # DB_TIMEZONE: str = 'Asia/Shanghai'
+    # 是否进行真实删除，为 False 时进行软删除，只修改名称以及状态
+    REAL_DELETE: bool = False
 
     """
     redis设置
@@ -148,6 +150,13 @@ class Settings(BaseSettings):
     LOG_DIR: str = 'logs'
 
     LOGGER: logging.Logger = None
+
+    """
+    启用模块
+    """
+    AUTH_MODULE_ENABLE: bool = False
+    ADMIN_MODULE_ENABLE: bool = False
+    CMDB_MODULE_ENABLE: bool = False
 
     """
     自关闭设置

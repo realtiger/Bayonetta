@@ -94,4 +94,10 @@ class OperationRecord(SiteBaseModel):
     __tablename__ = "operation_record"
 
     user_id: Mapped[int] = mapped_column("user_id", BigInteger, comment="用户id")
+    username: Mapped[str] = mapped_column("username", String(128), comment="用户名")
+    name: Mapped[str] = mapped_column("name", String(128), comment="用户展示名称")
+    login_ip: Mapped[str] = mapped_column("login_ip", String(128), comment="登录ip")
+    method: Mapped[PermissionMethods] = mapped_column("method", Enum(PermissionMethods), default=PermissionMethods.GET, comment="请求方法")
+    uri: Mapped[str] = mapped_column("uri", String(256), comment="请求uri")
     data: Mapped[str] = mapped_column("data", String(512), comment="请求数据")
+

@@ -1,4 +1,5 @@
 from calendar import timegm
+from dataclasses import dataclass
 from datetime import timedelta, datetime
 
 from fastapi import Depends, APIRouter, Request, Form
@@ -15,6 +16,18 @@ from watchtower.depends.authorization.types import Token, PayloadData, PayloadDa
 from watchtower.depends.cache.cache import CacheSystem, cache
 from watchtower.settings import settings, logger
 from watchtower.status.global_status import StatusMap
+
+
+@dataclass
+class UserData:
+    id: int = 0
+    name: str = ""
+    email: str = ""
+    avatar: str = ""
+    username: str = ""
+    superuser: bool = False
+    status: ModelStatus = ModelStatus.ACTIVE
+
 
 router = APIRouter()
 
@@ -144,56 +157,81 @@ async def generate_token(form_data: OAuth2RequestForm, cache_client: CacheSystem
         else:
             scopes = form_data.scopes
 
-        user = await get_user_info(form_data.username)
-
         # 用户认证是否通过标志位
-        is_auth = False
+        # is_auth = False
+
+        # TODO 添加 LDAP/邮箱认证
+        # 本地数据库认证
+        user = await get_user_info(form_data.username)
         if user:
             if is_token:
                 is_auth = await verify_password(form_data.password, user.password)
             else:
                 is_auth = True
+            # 认证通过则将用户信息进行格式化
+            if is_auth:
+                user_data = UserData(id=user.id, name=user.name, email=user.email, avatar=user.avatar, username=user.username, superuser=user.superuser, status=user.status)
+            else:
+                response.update(status=StatusMap.IDENTIFY_INVALID)
+                raise SiteException(status_code=IDENTIFY_INVALID_CODE, response=response)
+        else:
+            response.update(status=StatusMap.IDENTIFY_INVALID)
+            raise SiteException(status_code=IDENTIFY_INVALID_CODE, response=response)
 
         if is_auth:
             # 未激活状态报错
-            if user.status != ModelStatus.ACTIVE:
+            if user_data.status != ModelStatus.ACTIVE:
                 response.update(status=StatusMap.USER_NOT_ACTIVE)
                 raise SiteException(status_code=USER_NOT_ACTIVE_CODE, response=response)
 
             # 获取用户基本信息
-            data = PayloadDataUserInfo(id=user.id, name=user.name, email=user.email, avatar=user.avatar, username=user.username, superuser=user.superuser)
+            data = PayloadDataUserInfo(
+                id=user_data.id,
+                name=user_data.name,
+                email=user_data.email,
+                avatar=user_data.avatar,
+                username=user_data.username,
+                superuser=user_data.superuser
+            )
 
-            # 记住密码或者刷新token时设置过期时间,否则不设置过期时间
-            if form_data.remember or not is_token:
-                # 过期时间最小为1周
-                expires_delta = timedelta(weeks=1)
-                # 判断过期时间是否设置,如果设置了且两倍的过期时间大于1周,则过期时间设置为两倍的设置时间
-                if settings.ACCESS_TOKEN_EXPIRE_MINUTES:
-                    # 两倍的过期时间
-                    double_access_token_expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 2)
+            # 判断过期时间是否设置,如果设置了且两倍的过期时间大于1周,则过期时间设置为两倍的设置时间
+            if settings.ACCESS_TOKEN_EXPIRE_MINUTES:
+                # 两倍的过期时间
+                double_access_token_expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 2)
+
+                if form_data.remember or not is_token:
+                    # 记住密码或者刷新token时设置过期时间，取固定过期时间与两倍token过期时间最大值
+                    # 过期时间最小为1周
+                    expires_delta = timedelta(weeks=1)
                     if expires_delta < double_access_token_expires_delta:
                         expires_delta = double_access_token_expires_delta
+                else:
+                    # 不记住密码时设置过期时间，取固定过期时间与两倍token过期时间最小值，最小值为1天
+                    expires_delta = timedelta(days=1)
+                    if expires_delta > double_access_token_expires_delta:
+                        expires_delta = double_access_token_expires_delta
             else:
-                expires_delta = None
+                expires_delta = timedelta(days=1)
 
-            access_token = await create_access_token(payload=PayloadData(scopes=scopes, data=data, aud=user.username))
+            access_token = await create_access_token(payload=PayloadData(scopes=scopes, data=data, aud=user_data.username))
             refresh_token = await create_access_token(
-                payload=PayloadData(scopes=scopes, data=data, aud=user.username),
+                payload=PayloadData(scopes=scopes, data=data, aud=user_data.username),
                 expires_delta=expires_delta,
                 subject=TokenType.REFRESH_TOKEN
             )
 
             # 获取权限信息和菜单，然后存储到缓存中
-            permissions = await get_permissions_by_user_id(user.id)
+            permissions = await get_permissions_by_user_id(user_data.id)
 
             # 如果权限为空，则删除该key，即空访问方法
             permissions = {method: permissions[method] for method in permissions if permissions[method]}
             # 是否是超级管理员的信息也存储到权限信息中
-            permissions["superuser"] = [user.superuser]
+            permissions["superuser"] = [user_data.superuser]
 
-            await cache_client.set_permission(identify=user.id, permissions=permissions, expire=expires_delta if expires_delta else settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+            await cache_client.set_permission(identify=user_data.id, permissions=permissions, expire=expires_delta if expires_delta else settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
 
             if is_token:
+                # 对数据库数据进行操作
                 # 用户保存登录ip和登录时间
                 user.last_login_ip = login_ip
                 user.last_login_time = datetime.now()

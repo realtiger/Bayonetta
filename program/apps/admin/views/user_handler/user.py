@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from apps.admin.models import User, Role
 from apps.admin.views.user_handler.user_type import UserQueryData, UserCreateData, UserUpdateData, UserResetPasswordData
 from oracle.sqlalchemy import SQLAlchemyCRUDRouter, ValidationError, ITEM_NOT_FOUND_RESPONSE, ONLY_SUPERUSER_RESPONSE
-from oracle.types import ITEM_NOT_FOUND_CODE, ONLY_SUPERUSER_CODE, CREATE_FAILED_CODE
+from oracle.types import ITEM_NOT_FOUND_CODE, ONLY_SUPERUSER_CODE, CREATE_FAILED_CODE, DELETE_FAILED_CODE
 from oracle.utils import is_superuser
 from watchtower import PayloadData, SiteException
 from watchtower.depends.authorization.authorization import get_password_hash, signature_authentication
@@ -84,6 +84,12 @@ class UserCRUDRouter(SQLAlchemyCRUDRouter):
 
         return await super()._orm_update_statement(item_id, data, payload)
 
+    async def _pre_delete(self, data: dict):
+        if data.get('superuser'):
+            status = Status(StatusMap.DELETE_FAILED.code, "超级管理员用户无法被删除")
+            raise SiteException(status_code=DELETE_FAILED_CODE, response=GenericBaseResponse[dict](status=status)) from None
+        return data
+
 
 router = UserCRUDRouter(
     UserQueryData,
@@ -95,7 +101,7 @@ router = UserCRUDRouter(
     # TODO 限制管理员登陆
     get_all_route=True
 )
-tags_metadata = [{"name": "user", "description": "用户处理", }]
+tags_metadata = [{"name": "user", "description": "用户处理"}]
 
 
 @router.put("/{user_id}/roles", summary="修改用户角色", description="修改用户角色", response_model=UserQueryData, responses=update_user_roles_responses)

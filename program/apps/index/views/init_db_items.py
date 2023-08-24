@@ -23,4 +23,7 @@ permission_list = [
     {"id": 22, "title": "获取单个权限", "url": r"/api/admin/permission/\d+", "method": "GET", "code": "system:get-one-permission"},
     # {"id": 23, "title": "更新单个权限", "url": r"/api/admin/permission/\d+", "method": "PUT", "code": "system:update-one-permission"},
     # {"id": 24, "title": "删除单个权限", "url": r"/api/admin/permission/\d+", "method": "DELETE", "code": "system:delete-one-permission"},
+
+    {"id": 25, "title": "获取所有系统日志", "url": r"/api/admin/operation_record", "method": "GET", "code": "system:get-all-operation_record"},
+    {"id": 26, "title": "获取单个系统日志", "url": r"/api/admin/operation_record/\d+", "method": "GET", "code": "system:get-one-operation_record"},
 ]

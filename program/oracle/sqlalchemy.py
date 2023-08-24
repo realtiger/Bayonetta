@@ -226,6 +226,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             delete_all_route_params: dict | None = None,
             verbose_name: str = '',
             verbose_name_plural: str = '',
+            delete_update_field: str = '',
             **kwargs: Any
     ) -> None:
         self.db_model = db_model
@@ -241,6 +242,8 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             self.verbose_name_plural = f"{self.verbose_name}s"
         else:
             self.verbose_name_plural = verbose_name_plural
+
+        self.delete_update_field = delete_update_field
 
         if not isinstance(get_all_route_params, dict):
             get_all_route_params = {}
@@ -380,6 +383,11 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                         if key in model_dict:
                             db_model_data[key] = model_dict[key]
 
+                    invalid, main_key, main_value = self.is_main_field_value_invalid(db_model_data)
+
+                    if invalid:
+                        raise ValidationError(f"字段{main_key}的值{main_value}不允许以_delete结尾")
+
                     db_model: Model = self.db_model(**db_model_data)
                     session.add(db_model)
                     await session.flush()
@@ -405,7 +413,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                     response = Response[dict](status=StatusMap.CREATE_FAILED)
                     raise SiteException(status_code=CREATE_FAILED_CODE, response=response) from None
             response = Response[self.schema]()
-            model = await self._orm_get_one(db_model.id)
+            model = await self._orm_get_one(db_model.id, payload)
 
             if hasattr(self, '_post_create'):
                 model = await self._post_create(model)
@@ -422,12 +430,29 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 item_ids: list[self._primary_key_type] = Body(default=None, title="id list", description="delete item's id list", example=[1, 2, 3], ),  # type: ignore
                 payload: PayloadData | None = Depends(optional_signature_authentication)
         ) -> Response[GetAllData]:  # type: ignore
-            all_records, count, pagination = await self._orm_get_all_by_ids(item_ids)
-            delete_statement = delete(self.db_model).filter(getattr(self.db_model, self._primary_key).in_(item_ids)).returning(self.db_model)
+            all_records, count, pagination = await self._orm_get_all_by_ids(item_ids, payload=payload)
 
-            async with self.db_func().begin() as session:
-                await session.execute(delete_statement)
-                await session.commit()
+            # 如果是真删除，则直接删除，否则将名称添加后缀 _delete 并将 status 设置为 inactive
+            if settings.REAL_DELETE:
+                delete_statement = delete(self.db_model).filter(getattr(self.db_model, self._primary_key).in_(item_ids)).returning(self.db_model)
+
+                async with self.db_func().begin() as session:
+                    await session.execute(delete_statement)
+                    await session.commit()
+            else:
+                async with self.db_func().begin() as session:
+                    values = {'status': ModelStatus.OBSOLETE}
+                    for row in all_records:
+                        if 'name' in row:
+                            values['name'] = f"{row['name']}_delete"
+                        elif 'title' in row:
+                            values['title'] = f"{row['title']}_delete"
+                        elif self.delete_update_field and self.delete_update_field in row:
+                            values[self.delete_update_field] = f"{row[self.delete_update_field]}_delete"
+                        delete_statement = update(self.db_model).where(getattr(self.db_model, self._primary_key) == row[self._primary_key]).values(**values)
+                        await session.execute(delete_statement)
+
+                    await session.commit()
 
             if count > 0:
                 pagination.limit = count
@@ -439,7 +464,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
     def _get_one(self, *args: Any, **kwargs: Any) -> RESPONSE_CALLABLE:
         async def route(item_id: self._primary_key_type, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
-            model = await self._orm_get_one(item_id)
+            model = await self._orm_get_one(item_id, payload)
 
             response = Response[self.schema]()
             response.update(data=model)
@@ -455,10 +480,20 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         ) -> Response[self.schema]:  # type: ignore
             # 只获取更新后的字段
             model = model.dict(exclude_unset=True, exclude={self._primary_key})
+
             if hasattr(self, '_pre_update'):
                 model = await self._pre_update(model)
+
+            invalid, main_key, main_value = self.is_main_field_value_invalid(model)
+
+            if invalid:
+                raise SiteException(
+                    status_code=UPDATE_FAILED_CODE,
+                    response=Response[dict](status=Status(StatusMap.UPDATE_FAILED.code, f"字段{main_key}的值{main_value}不允许以_delete结尾"))
+                ) from None
+
             update_statement = await self._orm_update_statement(item_id, model, payload)
-            if not update_statement is None:
+            if update_statement is not None:
                 async with self.db_func().begin() as session:
                     try:
                         await session.execute(update_statement)
@@ -474,7 +509,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                         logger.error(f"update {self.db_model.__name__} error: {error}")
                         raise SiteException(status_code=UPDATE_FAILED_CODE, response=Response[dict](status=StatusMap.UPDATE_FAILED)) from None
 
-            db_model = await self._orm_get_one(item_id)
+            db_model = await self._orm_get_one(item_id, payload)
             data = self.format_query_data(db_model)
 
             if hasattr(self, '_post_update'):
@@ -488,13 +523,24 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
     def _delete_one(self, *args, **kwargs) -> RESPONSE_CALLABLE:
         async def route(item_id: self._primary_key_type, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
-            result = await self._orm_get_one(item_id)
+            result = await self._orm_get_one(item_id, payload)
             data = self.format_query_data(result)
 
             if hasattr(self, '_pre_delete'):
                 data = await self._pre_delete(data)
 
-            delete_statement = delete(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).returning(self.db_model)
+            # 如果是真删除，则直接删除，否则将名称添加后缀 _delete 并将 status 设置为 inactive
+            if settings.REAL_DELETE:
+                delete_statement = delete(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).returning(self.db_model)
+            else:
+                values = {'status': ModelStatus.OBSOLETE}
+                if 'name' in data:
+                    values['name'] = f"{data['name']}_delete"
+                elif 'title' in data:
+                    values['title'] = f"{data['title']}_delete"
+                elif self.delete_update_field and self.delete_update_field in data:
+                    values[self.delete_update_field] = f"{data[self.delete_update_field]}_delete"
+                delete_statement = update(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).values(**values)
 
             async with self.db_func().begin() as session:
                 try:
@@ -541,12 +587,21 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             count_records = (await session.execute(count_statement)).scalar()
         return all_records, count_records, pagination
 
-    async def _orm_get_all_by_ids(self, ids: [int] = None, orders: list[str] = None) -> tuple[Sequence, int, PAGINATION]:
+    async def _orm_get_all_by_ids(self, ids: [int] = None, orders: list[str] = None, payload: PayloadData | None = None) -> tuple[Sequence, int, PAGINATION]:
         if orders is None:
             orders = [getattr(self.db_model, self._primary_key).name]
 
+        # 普通用户只能查看 active 状态的数据
+        status_list = [ModelStatus.ACTIVE.value]
+        # 超级用户可以查看所有状态的数据
+        if await is_superuser(payload):
+            status_list.extend([ModelStatus.INACTIVE.value, ModelStatus.FROZEN.value])
+
         orders_formatter = self._order_formatter(orders)
-        all_statement_by_ids = select(self.db_model).where(getattr(self.db_model, self._primary_key).in_(ids)).order_by(*orders_formatter)
+        all_statement_by_ids = select(self.db_model).where(
+            getattr(self.db_model, self._primary_key).in_(ids),
+            getattr(self.db_model, 'status').in_(status_list)
+        ).order_by(*orders_formatter)
 
         async with self.db_func().begin() as session:
             all_records = list()
@@ -556,9 +611,9 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 all_records.append(self.format_query_data(row))
         return all_records, len(all_records), PAGINATION()
 
-    async def _orm_get_one(self, item_id) -> Model:
+    async def _orm_get_one(self, item_id, payload: PayloadData | None) -> Model:
         filter_params = {self._primary_key: item_id}
-        statement = self._orm_get_one_statement(filter_params)
+        statement = await self._orm_get_one_statement(filter_params, payload)
         async with self.db_func().begin() as session:
             try:
                 model = await session.execute(statement)
@@ -587,9 +642,19 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         return all_statement, count_statement
 
-    def _orm_get_one_statement(self, filters: dict[str, str]) -> Select:
+    async def _orm_get_one_statement(self, filters: dict[str, str], payload: PayloadData | None) -> Select:
         _, foreign_key_columns = self._get_columns()
-        statement = select(self.db_model).filter_by(**filters)
+
+        # 普通用户只能查看 active 状态的数据
+        status_list = [ModelStatus.ACTIVE.value]
+        # 超级用户可以查看所有状态的数据
+        if await is_superuser(payload):
+            status_list.extend([ModelStatus.INACTIVE.value, ModelStatus.FROZEN.value])
+
+        filter_value = [getattr(self.db_model, 'status').in_(status_list)]
+        for key in filters:
+            filter_value.append(getattr(self.db_model, key) == filters[key])
+        statement = select(self.db_model).filter(*filter_value)
 
         for column in foreign_key_columns:
             statement = statement.join(column, isouter=True).options(selectinload(column)).distinct()
@@ -637,6 +702,26 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 row_dict[field.key] = [child.id for child in getattr(row, field.key)]
 
         return row_dict
+
+    def is_main_field_value_invalid(self, model: dict) -> tuple[bool, str, str]:
+        """
+        检查主要字段的值是否不合法
+        :param model:
+        :return:
+        """
+        main_columns_key = ''
+        main_columns_value = ''
+        if 'name' in model:
+            main_columns_key = 'name'
+            main_columns_value = model['name']
+        elif 'title' in model:
+            main_columns_key = 'title'
+            main_columns_value = model['title']
+        elif self.delete_update_field and self.delete_update_field in model:
+            main_columns_key = self.delete_update_field
+            main_columns_value = model[self.delete_update_field]
+
+        return main_columns_value.endswith('_delete'), main_columns_key, main_columns_value
 
     @staticmethod
     def format_params(

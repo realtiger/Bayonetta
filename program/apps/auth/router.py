@@ -6,4 +6,4 @@ router = APIRouter()
 
 router.include_router(auth_router, tags=['auth'])
 
-tags_metadata = [{"name": "auth", "description": "认证处理", }]
+tags_metadata = [{"name": "auth", "description": "认证处理"}]

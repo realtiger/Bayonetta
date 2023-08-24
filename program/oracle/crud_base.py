@@ -126,9 +126,11 @@ class CRUDGenerator(Generic[T], APIRouter, ABC):
         self.schema = schema
         # 获取主键
         self._primary_key: str = self._primary_key if hasattr(self, "_primary_key") else "id"
-        # 创建和更新的schema
-        self.create_schema = create_schema if create_schema else schema_factory(self.schema, pk_field_name=self._primary_key, name=f'Create{schema.__name__.capitalize()}')
-        self.update_schema = update_schema if update_schema else schema_factory(self.schema, pk_field_name=self._primary_key, name=f'Update{schema.__name__.capitalize()}')
+        # 当对应路由有时，则保存 创建和更新的schema
+        if create_route:
+            self.create_schema = create_schema if create_schema else schema_factory(self.schema, pk_field_name=self._primary_key, name=f'Create{schema.__name__.capitalize()}')
+        if update_route:
+            self.update_schema = update_schema if update_schema else schema_factory(self.schema, pk_field_name=self._primary_key, name=f'Update{schema.__name__.capitalize()}')
         if prefix is None:
             prefix = self.schema.__name__
         # all prefix lowercase
