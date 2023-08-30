@@ -357,10 +357,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             if not orders:
                 orders = [getattr(self.db_model, self._primary_key).name]
 
-            if not await is_superuser(payload):
-                filters_dict['status'] = ModelStatus.ACTIVE.value
-
-            all_records, count_records, pagination = await self._orm_get_all(pagination, filters_dict, orders, ids)
+            all_records, count_records, pagination = await self._orm_get_all(pagination, filters_dict, orders, ids, payload)
 
             pagination_data = PaginationData(index=pagination.index, limit=pagination.limit, total=count_records, offset=pagination.offset)
             data = GetAllData(items=all_records, pagination=pagination_data).dict()
@@ -432,7 +429,8 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         ) -> Response[GetAllData]:  # type: ignore
             all_records, count, pagination = await self._orm_get_all_by_ids(item_ids, payload=payload)
 
-            # 如果是真删除，则直接删除，否则将名称添加后缀 _delete 并将 status 设置为 inactive
+            # 如果是真删除，则直接删除，否则将名称添加后缀 {时间戳[-6:]}_delete 并将 status 设置为 inactive
+            # TODO 没有考虑超过数据库字符数量限制的情况
             if settings.REAL_DELETE:
                 delete_statement = delete(self.db_model).filter(getattr(self.db_model, self._primary_key).in_(item_ids)).returning(self.db_model)
 
@@ -443,12 +441,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 async with self.db_func().begin() as session:
                     values = {'status': ModelStatus.OBSOLETE}
                     for row in all_records:
-                        if 'name' in row:
-                            values['name'] = f"{row['name']}_delete"
-                        elif 'title' in row:
-                            values['title'] = f"{row['title']}_delete"
-                        elif self.delete_update_field and self.delete_update_field in row:
-                            values[self.delete_update_field] = f"{row[self.delete_update_field]}_delete"
+                        await self.set_delete_show_name(row, values)
                         delete_statement = update(self.db_model).where(getattr(self.db_model, self._primary_key) == row[self._primary_key]).values(**values)
                         await session.execute(delete_statement)
 
@@ -534,12 +527,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 delete_statement = delete(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).returning(self.db_model)
             else:
                 values = {'status': ModelStatus.OBSOLETE}
-                if 'name' in data:
-                    values['name'] = f"{data['name']}_delete"
-                elif 'title' in data:
-                    values['title'] = f"{data['title']}_delete"
-                elif self.delete_update_field and self.delete_update_field in data:
-                    values[self.delete_update_field] = f"{data[self.delete_update_field]}_delete"
+                await self.set_delete_show_name(data, values)
                 delete_statement = update(self.db_model).where(getattr(self.db_model, self._primary_key) == item_id).values(**values)
 
             async with self.db_func().begin() as session:
@@ -565,7 +553,8 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             pagination: PAGINATION = None,
             filters: dict[str, str] = None,
             orders: list[str] = None,
-            ids: list[int] = None
+            ids: list[int] = None,
+            payload: PayloadData | None = None
     ) -> tuple[Sequence, int, PAGINATION]:
         if pagination is None:
             pagination = self.pagination()
@@ -576,7 +565,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         orders_formatter = self._order_formatter(orders)
 
-        all_statement, count_statement = self._orm_get_all_statement(pagination, filters, orders_formatter, ids)
+        all_statement, count_statement = await self._orm_get_all_statement(pagination, filters, orders_formatter, ids, payload)
 
         async with self.db_func().begin() as session:
             all_records = list()
@@ -626,13 +615,20 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 raise SiteException(status_code=ITEM_NOT_FOUND_CODE, response=response) from None
         return model
 
-    def _orm_get_all_statement(self, pagination: PAGINATION, filters: dict[str, str], orders: list, ids: list[int]) -> tuple[Select, Select]:
-        # query count statement
-        count_statement = select(func.count()).select_from(self.db_model).filter_by(**filters).distinct()
+    async def _orm_get_all_statement(
+            self,
+            pagination: PAGINATION,
+            filters: dict[str, str | list],
+            orders: list, ids: list[int],
+            payload: PayloadData | None
+    ) -> tuple[Select, Select]:
         _, foreign_key_columns = self._get_columns()
+        filter_value = await self.format_select_filter_params(filters, payload)
 
+        # query count statement
+        count_statement = select(func.count()).select_from(self.db_model).filter(*filter_value).distinct()
         # query all statement
-        all_statement = select(self.db_model).filter_by(**filters).order_by(*orders).offset(pagination.offset).limit(pagination.limit).distinct()
+        all_statement = select(self.db_model).filter(*filter_value).order_by(*orders).offset(pagination.offset).limit(pagination.limit).distinct()
 
         if ids:
             all_statement = all_statement.where(getattr(self.db_model, self._primary_key).in_(ids))
@@ -642,18 +638,10 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         return all_statement, count_statement
 
-    async def _orm_get_one_statement(self, filters: dict[str, str], payload: PayloadData | None) -> Select:
+    async def _orm_get_one_statement(self, filters: dict[str, str | list], payload: PayloadData | None) -> Select:
         _, foreign_key_columns = self._get_columns()
 
-        # 普通用户只能查看 active 状态的数据
-        status_list = [ModelStatus.ACTIVE.value]
-        # 超级用户可以查看所有状态的数据
-        if await is_superuser(payload):
-            status_list.extend([ModelStatus.INACTIVE.value, ModelStatus.FROZEN.value])
-
-        filter_value = [getattr(self.db_model, 'status').in_(status_list)]
-        for key in filters:
-            filter_value.append(getattr(self.db_model, key) == filters[key])
+        filter_value = await self.format_select_filter_params(filters, payload)
         statement = select(self.db_model).filter(*filter_value)
 
         for column in foreign_key_columns:
@@ -661,12 +649,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         return statement
 
-    async def _orm_can_update_status(self, payload: PayloadData | None = None) -> bool:
-        return await is_superuser(payload)
-
     async def _orm_update_statement(self, item_id: int, data: dict, payload: PayloadData | None = None) -> Update | None:
-        if not await self._orm_can_update_status(payload) and "status" in data:
-            data.pop("status")
         if not data:
             return
 
@@ -787,3 +770,46 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         :return:
         """
         return item
+
+    async def format_select_filter_params(self, filters: dict[str, str | list], payload: PayloadData | None) -> list:
+        """
+        格式化查询参数
+        :param filters:
+        :return:
+        """
+        status_list = [ModelStatus.ACTIVE.value, ModelStatus.INACTIVE.value, ModelStatus.FROZEN.value]
+        # 只有超级用户可以查看所有状态的数据，其他用户不能看到逻辑删除的数据
+        if 'status' in filters:
+            # 含有 status 筛选条件并且不是超级用户，则需要筛除逻辑删除的数据
+            if not await is_superuser(payload):
+                if isinstance(filters['status'], list) and ModelStatus.OBSOLETE.value in filters['status']:
+                    filters['status'].remove(ModelStatus.OBSOLETE.value)
+                elif isinstance(filters['status'], str) and filters['status'] == ModelStatus.OBSOLETE.value:
+                    # 保证查询不到任何数据
+                    filters['status'] = 'unknown'
+            # 是超级用户则全部放行即可
+            # else:
+            #     pass
+        else:
+            # 没有 status 筛选条件则默认只查询 active 状态的数据
+            filters['status'] = status_list
+
+        filter_value = list()
+        for key in filters:
+            if isinstance(filters[key], list):
+                filter_value.append(getattr(self.db_model, key).in_(filters[key]))
+            else:
+                filter_value.append(getattr(self.db_model, key) == filters[key])
+
+        return filter_value
+
+    async def set_delete_show_name(self, row, values):
+        # 6位时间戳后缀，最小限度保证唯一性
+        timestamp_last_six = str(int(time.time()))[-6:]
+        prefix = f"{timestamp_last_six}_delete"
+        if 'name' in row:
+            values['name'] = f"{row['name']}_{prefix}"
+        elif 'title' in row:
+            values['title'] = f"{row['title']}_{prefix}"
+        elif self.delete_update_field and self.delete_update_field in row:
+            values[self.delete_update_field] = f"{row[self.delete_update_field]}_{prefix}"
