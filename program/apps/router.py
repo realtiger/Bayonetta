@@ -9,10 +9,10 @@ routers = [
 
 tags_metadata = [{"name": "index", "description": "Common operations. The **check health** / **login** logic is also here.", }, ]
 
-if settings.AUTH_ENABLED:
+if settings.AUTH_MODULE_ENABLE:
     routers.append({"router": auth_router, "tags": ["auth"]})
     tags_metadata.extend(auth_tags_metadata)
 
-if settings.ADMIN_ENABLED:
+if settings.ADMIN_MODULE_ENABLE:
     routers.append({"router": admin_router})
     tags_metadata.extend(admin_tags_metadata)
