@@ -6,6 +6,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+# alembic_models 里面有扫描所有models的代码，所以需要先导入
 from alembic_models import sql_helper
 
 # this is the Alembic Config object, which provides

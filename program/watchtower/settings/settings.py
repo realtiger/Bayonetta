@@ -31,6 +31,9 @@ def gen_secret_key() -> list:
     return secret_key
 
 
+env_file_absolute_path = BASE_DIR.parent / ".env"
+
+
 class Settings(BaseSettings):
     """
     基础配置
@@ -129,6 +132,8 @@ class Settings(BaseSettings):
     DB_ECHO: bool = True
     # DB_USE_TZ: bool = False
     # DB_TIMEZONE: str = 'Asia/Shanghai'
+    # 是否进行真实删除，为 False 时进行软删除，只修改名称以及状态
+    REAL_DELETE: bool = False
 
     """
     redis设置
@@ -150,6 +155,13 @@ class Settings(BaseSettings):
     LOGGER: logging.Logger = None
 
     """
+    启用模块
+    """
+    AUTH_MODULE_ENABLE: bool = False
+    ADMIN_MODULE_ENABLE: bool = False
+    CMDB_MODULE_ENABLE: bool = False
+
+    """
     自关闭设置
     """
     # 是否进行开启，目前仅支持使用supervisor启动的程序
@@ -158,7 +170,7 @@ class Settings(BaseSettings):
     AFTER_SECONDS: int = 600
 
     class Config:
-        env_file = ".env"
+        env_file = env_file_absolute_path
 
     def get_logger(self):
         """

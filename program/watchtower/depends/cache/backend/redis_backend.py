@@ -6,10 +6,7 @@ from watchtower.settings import settings
 def create_conn_pool() -> aioredis.ConnectionPool:
     if settings.CACHE_REDIS_ENABLE:
         if settings.CACHE_REDIS_PASSWORD:
-            if settings.CACHE_REDIS_USERNAME:
-                redis_auth = f'{settings.CACHE_REDIS_USERNAME}:{settings.CACHE_REDIS_PASSWORD}@'
-            else:
-                redis_auth = f'{settings.CACHE_REDIS_PASSWORD}@'
+            redis_auth = f'{settings.CACHE_REDIS_USERNAME}:{settings.CACHE_REDIS_PASSWORD}@'
         else:
             redis_auth = ''
 

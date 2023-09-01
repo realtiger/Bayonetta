@@ -1,11 +1,11 @@
 from fastapi import Depends, Body
-from sqlalchemy import Update, select
+from sqlalchemy import Update, select, Select
 from sqlalchemy.orm import selectinload
 
 from apps.admin.models import User, Role
 from apps.admin.views.user_handler.user_type import UserQueryData, UserCreateData, UserUpdateData, UserResetPasswordData
 from oracle.sqlalchemy import SQLAlchemyCRUDRouter, ValidationError, ITEM_NOT_FOUND_RESPONSE, ONLY_SUPERUSER_RESPONSE
-from oracle.types import ITEM_NOT_FOUND_CODE, ONLY_SUPERUSER_CODE, CREATE_FAILED_CODE
+from oracle.types import ITEM_NOT_FOUND_CODE, ONLY_SUPERUSER_CODE, CREATE_FAILED_CODE, DELETE_FAILED_CODE, ModelStatus, PAGINATION
 from oracle.utils import is_superuser
 from watchtower import PayloadData, SiteException
 from watchtower.depends.authorization.authorization import get_password_hash, signature_authentication
@@ -67,6 +67,35 @@ def check_password(password: str, re_password: str):
 
 
 class UserCRUDRouter(SQLAlchemyCRUDRouter):
+    async def _orm_get_one_statement(self, filters: dict[str, str | list], payload: PayloadData | None) -> Select:
+        # 普通用户只能查看 active 状态的数据
+        status_list = [ModelStatus.ACTIVE.value]
+        # 超级用户可以查看所有状态的数据
+        if await is_superuser(payload):
+            status_list.extend([ModelStatus.INACTIVE.value, ModelStatus.FROZEN.value])
+
+        filters['status'] = status_list
+
+        return await super()._orm_get_one_statement(filters, payload)
+
+    async def _orm_get_all_statement(
+            self,
+            pagination: PAGINATION,
+            filters: dict[str, str | list],
+            orders: list,
+            ids: list[int],
+            payload: PayloadData | None
+    ) -> tuple[Select, Select]:
+        # 普通用户只能查看 active 状态的数据
+        status_list = [ModelStatus.ACTIVE.value]
+        # 超级用户可以查看所有状态的数据
+        if await is_superuser(payload):
+            status_list.extend([ModelStatus.INACTIVE.value, ModelStatus.FROZEN.value])
+
+        filters['status'] = status_list
+
+        return await super()._orm_get_all_statement(pagination, filters, orders, ids, payload)
+
     async def _create_validator(self, item: dict) -> dict:
         password = item.get("password")
         re_password = item.get("re_password")
@@ -78,11 +107,22 @@ class UserCRUDRouter(SQLAlchemyCRUDRouter):
         raise ValidationError(f"密码不符合要求: {reason}")
 
     async def _orm_update_statement(self, item_id: int, data: dict, payload: PayloadData | None = None) -> Update:
-        if not await is_superuser(payload) and 'superuser' in data:
+        if not await is_superuser(payload):
             # 想要给item设置superuser但是当前用户不是superuser，则直接取消superuser的设置
-            data.pop('superuser')
+            if 'superuser' in data:
+                data.pop('superuser')
+
+            # 非超级管理员用户无法修改自己的状态
+            if "status" in data:
+                data.pop("status")
 
         return await super()._orm_update_statement(item_id, data, payload)
+
+    async def _pre_delete(self, data: dict):
+        if data.get('superuser'):
+            status = Status(StatusMap.DELETE_FAILED.code, "超级管理员用户无法被删除")
+            raise SiteException(status_code=DELETE_FAILED_CODE, response=GenericBaseResponse[dict](status=status)) from None
+        return data
 
 
 router = UserCRUDRouter(
@@ -95,7 +135,7 @@ router = UserCRUDRouter(
     # TODO 限制管理员登陆
     get_all_route=True
 )
-tags_metadata = [{"name": "user", "description": "用户处理", }]
+tags_metadata = [{"name": "user", "description": "用户处理"}]
 
 
 @router.put("/{user_id}/roles", summary="修改用户角色", description="修改用户角色", response_model=UserQueryData, responses=update_user_roles_responses)
