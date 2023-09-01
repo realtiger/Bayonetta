@@ -16,17 +16,17 @@ class MenuCRUDRouter(SQLAlchemyCRUDRouter):
 
         return item
 
-    async def _post_create(self, item, request: Request | None = None, payload: PayloadData | None = None):
+    async def _post_create(self, item: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
         await get_menu_tree(refresh=True)
-        return item
+        return await super()._post_create(item, request, payload)
 
     async def _post_update(self, item: dict, original_data: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
         await get_menu_tree(refresh=True)
-        return item
+        return await super()._post_update(item, original_data, request, payload)
 
     async def _post_delete(self, item: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
         await get_menu_tree(refresh=True)
-        return item
+        return await super()._post_delete(item, request, payload)
 
     async def _orm_update_statement(self, item_id: int, data: dict, payload: PayloadData | None = None) -> Update:
         # 非超级管理员用户无法修改状态
