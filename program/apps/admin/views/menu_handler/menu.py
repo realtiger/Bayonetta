@@ -1,5 +1,5 @@
+from fastapi import Request
 from sqlalchemy import Update
-from sqlalchemy.ext.declarative import DeclarativeMeta as Model
 
 from apps.admin.models import Menu
 from apps.admin.views.menu_handler.build_menu import get_menu_tree
@@ -16,17 +16,17 @@ class MenuCRUDRouter(SQLAlchemyCRUDRouter):
 
         return item
 
-    async def _post_create(self, model: Model) -> Model:
+    async def _post_create(self, item, request: Request | None = None, payload: PayloadData | None = None):
         await get_menu_tree(refresh=True)
-        return model
+        return item
 
-    async def _post_update(self, model: Model) -> Model:
+    async def _post_update(self, item: dict, original_data: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
         await get_menu_tree(refresh=True)
-        return model
+        return item
 
-    async def _post_delete(self, model: Model) -> Model:
+    async def _post_delete(self, item: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
         await get_menu_tree(refresh=True)
-        return model
+        return item
 
     async def _orm_update_statement(self, item_id: int, data: dict, payload: PayloadData | None = None) -> Update:
         # 非超级管理员用户无法修改状态

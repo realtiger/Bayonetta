@@ -1,4 +1,4 @@
-from fastapi import Depends, Body
+from fastapi import Depends, Body, Request
 from sqlalchemy import Update, select, Select
 from sqlalchemy.orm import selectinload
 
@@ -118,11 +118,11 @@ class UserCRUDRouter(SQLAlchemyCRUDRouter):
 
         return await super()._orm_update_statement(item_id, data, payload)
 
-    async def _pre_delete(self, data: dict):
-        if data.get('superuser'):
+    async def _pre_delete(self, item: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
+        if item.get('superuser'):
             status = Status(StatusMap.DELETE_FAILED.code, "超级管理员用户无法被删除")
             raise SiteException(status_code=DELETE_FAILED_CODE, response=GenericBaseResponse[dict](status=status)) from None
-        return data
+        return item
 
 
 router = UserCRUDRouter(
