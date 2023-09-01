@@ -26,4 +26,10 @@ permission_list = [
 
     {"id": 25, "title": "获取所有系统日志", "url": r"/api/admin/operation_record", "method": "GET", "code": "system:get-all-operation_record"},
     {"id": 26, "title": "获取单个系统日志", "url": r"/api/admin/operation_record/\d+", "method": "GET", "code": "system:get-one-operation_record"},
+    {"id": 27, "title": "获取所有主机", "url": r"/api/cmdb/server", "method": "GET", "code": "cmdb:get-all-server"},
+    {"id": 28, "title": "创建单个主机", "url": r"/api/cmdb/server", "method": "POST", "code": "cmdb:create-one-server"},
+    # {"id": 29, "title": "删除多个主机", "url": r"/api/cmdb/server", "method": "DELETE", "code": "cmdb:delete-many-server"},
+    {"id": 30, "title": "获取单个主机", "url": r"/api/cmdb/server/\d+", "method": "GET", "code": "cmdb:get-one-server"},
+    {"id": 31, "title": "更新单个主机", "url": r"/api/cmdb/server/\d+", "method": "PUT", "code": "cmdb:update-one-server"},
+    {"id": 32, "title": "删除单个主机", "url": r"/api/cmdb/server/\d+", "method": "DELETE", "code": "cmdb:delete-one-server"},
 ]
