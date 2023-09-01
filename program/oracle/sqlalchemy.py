@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 from typing import Type, Any, Callable, Generator, Coroutine, Sequence, Optional
 
-from fastapi import Depends, Query, Body
+from fastapi import Depends, Query, Body, Request
 from fastapi.types import DecoratedCallable
 from pydantic import create_model
 from sqlalchemy import select, func, Enum, DateTime, Select, desc, asc, delete, update, MetaData, BigInteger, Update
@@ -368,11 +368,14 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         return route
 
     def _create(self, *args: Any, **kwargs: Any) -> RESPONSE_CALLABLE:
-        async def route(model: self.create_schema, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
+        async def route(
+                request: Request,
+                model: self.create_schema,  # type: ignore
+                payload: PayloadData | None = Depends(optional_signature_authentication)
+        ) -> Response[self.schema]:  # type: ignore
             async with self.db_func().begin() as session:
                 try:
-                    if hasattr(self, '_pre_create'):
-                        model = await self._pre_create(model)
+                    model = await self._pre_create(model, request=request, payload=payload)
                     model_dict = await self._create_validator(model.dict())
 
                     db_model_data = {}
@@ -412,12 +415,8 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             response = Response[self.schema]()
             model = await self._orm_get_one(db_model.id, payload)
 
-            if hasattr(self, '_post_create'):
-                model = await self._post_create(model)
-
-            # 这里会把 Model 类型自动转换为 schema 类型
-            # 直接使用 return Response[self.schema](data=db_model) 编辑器会发出警告，因此先赋值再返回
-            response.update(data=model)
+            data = await self._post_create(self.format_query_data(model), request=request, payload=payload)
+            response.update(data=data)
             return response
 
         return route
@@ -467,15 +466,14 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
     def _update(self, *args: Any, **kwargs: Any) -> RESPONSE_CALLABLE:
         async def route(
+                request: Request,
                 item_id: self._primary_key_type,  # type: ignore
                 model: self.update_schema,  # type: ignore
                 payload: PayloadData | None = Depends(optional_signature_authentication)
         ) -> Response[self.schema]:  # type: ignore
             # 只获取更新后的字段
             model = model.dict(exclude_unset=True, exclude={self._primary_key})
-
-            if hasattr(self, '_pre_update'):
-                model = await self._pre_update(model)
+            model = await self._pre_update(model, request=request, payload=payload)
 
             invalid, main_key, main_value = self.is_main_field_value_invalid(model)
 
@@ -484,6 +482,9 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                     status_code=UPDATE_FAILED_CODE,
                     response=Response[dict](status=Status(StatusMap.UPDATE_FAILED.code, f"字段{main_key}的值{main_value}不允许以_delete结尾"))
                 ) from None
+
+            # 保存原数据，为进一步操作做准备
+            original_data = await self._orm_get_one(item_id, payload)
 
             update_statement = await self._orm_update_statement(item_id, model, payload)
             if update_statement is not None:
@@ -505,9 +506,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             db_model = await self._orm_get_one(item_id, payload)
             data = self.format_query_data(db_model)
 
-            if hasattr(self, '_post_update'):
-                data = await self._post_update(data)
-
+            data = await self._post_update(data, self.format_query_data(original_data), request=request, payload=payload)
             response = Response[self.schema]()
             response.update(data=data)
             return response
@@ -515,12 +514,14 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         return route
 
     def _delete_one(self, *args, **kwargs) -> RESPONSE_CALLABLE:
-        async def route(item_id: self._primary_key_type, payload: PayloadData | None = Depends(optional_signature_authentication)) -> Response[self.schema]:  # type: ignore
+        async def route(
+                request: Request,
+                item_id: self._primary_key_type,  # type: ignore
+                payload: PayloadData | None = Depends(optional_signature_authentication)
+        ) -> Response[self.schema]:  # type: ignore
             result = await self._orm_get_one(item_id, payload)
             data = self.format_query_data(result)
-
-            if hasattr(self, '_pre_delete'):
-                data = await self._pre_delete(data)
+            data = await self._pre_delete(data, request=request, payload=payload)
 
             # 如果是真删除，则直接删除，否则将名称添加后缀 _delete 并将 status 设置为 inactive
             if settings.REAL_DELETE:
@@ -539,9 +540,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                     logger.error(f"delete {self.db_model.__name__} error: {error}")
                     raise SiteException(status_code=DELETE_FAILED_CODE, response=Response[dict](status=StatusMap.DELETE_FAILED)) from None
 
-            if hasattr(self, '_post_delete'):
-                data = await self._post_delete(data)
-
+            data = await self._post_delete(data, request=request, payload=payload)
             response = Response[self.schema]()
             response.update(data=data)
             return response
@@ -766,6 +765,54 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
     async def _create_validator(self, item: dict) -> dict:
         """
         校验创建数据， 返回校验后的数据
+        :param item:
+        :return:
+        """
+        return item
+
+    async def _pre_create(self, item, request: Request | None = None, payload: PayloadData | None = None):
+        """
+        创建数据前的操作，返回操作后的数据
+        :param item:
+        :return:
+        """
+        return item
+
+    async def _post_create(self, item: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
+        """
+        创建数据后的操作，返回操作后的数据
+        :param item:
+        :return:
+        """
+        return item
+
+    async def _pre_update(self, item: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
+        """
+        更新数据前的操作，返回操作后的数据
+        :param item:
+        :return:
+        """
+        return item
+
+    async def _post_update(self, item: dict, original_data: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
+        """
+        更新数据后的操作，返回操作后的数据
+        :param item:
+        :return:
+        """
+        return item
+
+    async def _pre_delete(self, item: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
+        """
+        删除数据前的操作，返回操作后的数据
+        :param item:
+        :return:
+        """
+        return item
+
+    async def _post_delete(self, item: dict, request: Request | None = None, payload: PayloadData | None = None) -> dict:
+        """
+        删除数据后的操作，返回操作后的数据
         :param item:
         :return:
         """

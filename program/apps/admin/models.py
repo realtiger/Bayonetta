@@ -1,7 +1,7 @@
 import datetime
 import enum
 
-from sqlalchemy import String, BigInteger, ForeignKey, UniqueConstraint, Enum, Boolean
+from sqlalchemy import String, BigInteger, ForeignKey, UniqueConstraint, Enum, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from oracle.sqlalchemy import SiteBaseModel, ModelBase
@@ -100,4 +100,4 @@ if settings.ADMIN_MODULE_ENABLE:
         login_ip: Mapped[str] = mapped_column("login_ip", String(128), comment="登录ip")
         method: Mapped[PermissionMethods] = mapped_column("method", Enum(PermissionMethods), default=PermissionMethods.GET, comment="请求方法")
         uri: Mapped[str] = mapped_column("uri", String(256), comment="请求uri")
-        data: Mapped[str] = mapped_column("data", String(512), comment="请求数据")
+        data: Mapped[str] = mapped_column("data", Text(), comment="请求数据")
