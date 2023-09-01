@@ -31,6 +31,9 @@ def gen_secret_key() -> list:
     return secret_key
 
 
+env_file_absolute_path = BASE_DIR.parent / ".env"
+
+
 class Settings(BaseSettings):
     """
     基础配置
@@ -167,7 +170,7 @@ class Settings(BaseSettings):
     AFTER_SECONDS: int = 600
 
     class Config:
-        env_file = ".env"
+        env_file = env_file_absolute_path
 
     def get_logger(self):
         """

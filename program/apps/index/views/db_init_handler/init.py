@@ -3,8 +3,8 @@ from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-import business_init
 from apps.admin.models import User, Role, Permission
+from apps.index.views.db_init_handler import business_init
 from apps.index.views.db_init_handler.init_db_items import permission_list
 from oracle.sqlalchemy import sql_helper
 from watchtower import Response
@@ -87,6 +87,6 @@ async def init_db(force: bool = False):
             await session.commit()
             await session.flush()
 
-    business_init.run()
+    await business_init.run()
 
     return InitResponse()

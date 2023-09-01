@@ -1,9 +1,11 @@
+from sqlalchemy import Update
 from sqlalchemy.ext.declarative import DeclarativeMeta as Model
 
 from apps.admin.models import Menu
 from apps.admin.views.menu_handler.build_menu import get_menu_tree
 from apps.admin.views.menu_handler.menu_type import MenuQueryData, MenuCreateData, MenuUpdateData
 from oracle.sqlalchemy import SQLAlchemyCRUDRouter
+from watchtower import PayloadData
 from watchtower.status.types.response import GetAllData, GenericBaseResponse, PaginationData
 
 
@@ -25,6 +27,13 @@ class MenuCRUDRouter(SQLAlchemyCRUDRouter):
     async def _post_delete(self, model: Model) -> Model:
         await get_menu_tree(refresh=True)
         return model
+
+    async def _orm_update_statement(self, item_id: int, data: dict, payload: PayloadData | None = None) -> Update:
+        # 非超级管理员用户无法修改状态
+        if "status" in data:
+            data.pop("status")
+
+        return await super()._orm_update_statement(item_id, data, payload)
 
 
 router = MenuCRUDRouter(

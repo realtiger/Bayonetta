@@ -1,2 +1,2 @@
-def run(*args, **kwargs):
+async def run(*args, **kwargs):
     pass
