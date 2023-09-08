@@ -17,6 +17,9 @@ if settings.ADMIN_MODULE_ENABLE:
 
 
     class UserRole(ModelBase):
+        """
+        用户角色关联表
+        """
         __tablename__ = "user_role"
 
         id: Mapped[int] = mapped_column("id", BigInteger, primary_key=True, comment="用户角色关联表id")
@@ -27,6 +30,9 @@ if settings.ADMIN_MODULE_ENABLE:
 
 
     class RolePermission(ModelBase):
+        """
+        角色权限关联表
+        """
         __tablename__ = "role_permission"
 
         id: Mapped[int] = mapped_column("id", BigInteger, primary_key=True, comment="角色权限关联表id")
@@ -34,8 +40,10 @@ if settings.ADMIN_MODULE_ENABLE:
         permission_id: Mapped[int] = mapped_column("permission_id", BigInteger, ForeignKey("permission.id", ondelete="CASCADE"), comment="权限id")
 
 
-    # 角色表
     class Role(SiteBaseModel):
+        """
+        角色表
+        """
         __tablename__ = "role"
 
         name: Mapped[str] = mapped_column("name", String(128), comment="角色名称", unique=True)
@@ -45,8 +53,10 @@ if settings.ADMIN_MODULE_ENABLE:
         permissions = relationship("Permission", secondary="role_permission", back_populates="roles")
 
 
-    # 用户表
     class User(SiteBaseModel):
+        """
+        用户表
+        """
         __tablename__ = "user"
 
         username: Mapped[str] = mapped_column("username", String(128), comment="用户登录名", unique=True)
@@ -63,6 +73,9 @@ if settings.ADMIN_MODULE_ENABLE:
 
 
     class Permission(SiteBaseModel):
+        """
+        权限表
+        """
         __tablename__ = "permission"
 
         title: Mapped[str] = mapped_column("title", String(128), comment="权限名称", unique=True)
@@ -80,6 +93,9 @@ if settings.ADMIN_MODULE_ENABLE:
 
 
     class Menu(SiteBaseModel):
+        """
+        菜单表
+        """
         __tablename__ = "menu"
 
         title: Mapped[str] = mapped_column("title", String(128), comment="菜单名称", unique=True)
@@ -90,8 +106,10 @@ if settings.ADMIN_MODULE_ENABLE:
         menu_parent = relationship("Menu", remote_side="Menu.id", backref="children")
 
 
-    # 操作记录
     class OperationRecord(SiteBaseModel):
+        """
+        操作记录表
+        """
         __tablename__ = "operation_record"
 
         user_id: Mapped[int] = mapped_column("user_id", BigInteger, comment="用户id")
@@ -100,4 +118,6 @@ if settings.ADMIN_MODULE_ENABLE:
         login_ip: Mapped[str] = mapped_column("login_ip", String(128), comment="登录ip")
         method: Mapped[PermissionMethods] = mapped_column("method", Enum(PermissionMethods), default=PermissionMethods.GET, comment="请求方法")
         uri: Mapped[str] = mapped_column("uri", String(256), comment="请求uri")
+        app: Mapped[str] = mapped_column("app", String(128), comment="访问app")
+        module: Mapped[str] = mapped_column("module", String(128), comment="访问module")
         data: Mapped[str] = mapped_column("data", Text(), comment="请求数据")
