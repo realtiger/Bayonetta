@@ -13,10 +13,11 @@ python-dotenv = "^1.0.0"
 python-multipart = "^0.0.6"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
-redis = "^4.5.5"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.17"}
 aiomysql = "^0.1.1"
 email-validator = "^2.0.0.post2"
+celery = {extras = ["auth", "librabbitmq", "msgpack", "redis"], version = "^5.3.4"}
+websockets = "^11.0.3"
 
 [tool.poetry.group.dev.dependencies]
 alembic = "^1.11.1"

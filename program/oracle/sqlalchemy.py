@@ -383,10 +383,10 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                         if key in model_dict:
                             db_model_data[key] = model_dict[key]
 
-                    invalid, main_key, main_value = self.is_main_field_value_invalid(db_model_data)
+                    invalid, main_key, main_value = await self.is_main_field_value_invalid(db_model_data)
 
                     if invalid:
-                        raise ValidationError(f"字段{main_key}的值{main_value}不允许以_delete结尾")
+                        raise ValidationError(f"字段{main_key}的值{main_value}不允许以{await self.get_delete_prefix()}结尾")
 
                     db_model: Model = self.db_model(**db_model_data)
                     session.add(db_model)
@@ -475,7 +475,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             model = model.dict(exclude_unset=True, exclude={self._primary_key})
             model = await self._pre_update(model, request=request, payload=payload)
 
-            invalid, main_key, main_value = self.is_main_field_value_invalid(model)
+            invalid, main_key, main_value = await self.is_main_field_value_invalid(model)
 
             if invalid:
                 raise SiteException(
@@ -685,7 +685,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         return row_dict
 
-    def is_main_field_value_invalid(self, model: dict) -> tuple[bool, str, str]:
+    async def is_main_field_value_invalid(self, model: dict) -> tuple[bool, str, str]:
         """
         检查主要字段的值是否不合法
         :param model:
@@ -703,7 +703,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             main_columns_key = self.delete_update_field
             main_columns_value = model[self.delete_update_field]
 
-        return main_columns_value.endswith('_delete'), main_columns_key, main_columns_value
+        return main_columns_value.endswith(await self.get_delete_prefix()), main_columns_key, main_columns_value
 
     @staticmethod
     def format_params(
@@ -850,10 +850,13 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
 
         return filter_value
 
+    async def get_delete_prefix(self):
+        return "(deleted)"
+
     async def set_delete_show_name(self, row, values):
         # 6位时间戳后缀，最小限度保证唯一性
         timestamp_last_six = str(int(time.time()))[-6:]
-        prefix = f"{timestamp_last_six}_delete"
+        prefix = f"{timestamp_last_six}{await self.get_delete_prefix()}"
         if 'name' in row:
             values['name'] = f"{row['name']}_{prefix}"
         elif 'title' in row:

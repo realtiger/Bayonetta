@@ -337,7 +337,7 @@ async def logout(payload: PayloadData = Depends(optional_signature_authenticatio
 
 @router.get("/load_data", summary="加载数据", response_model=Response[LoadData])
 async def load_init_data(request: Request, payload: PayloadData = Depends(optional_signature_authentication), cache_client: CacheSystem = Depends(cache)):
-    load_data = LoadData()
+    load_data = LoadData(app=dict())
     if not payload.data:
         token = request.headers.get("Authorization-Refresh", None)
         if token:
@@ -345,7 +345,7 @@ async def load_init_data(request: Request, payload: PayloadData = Depends(option
 
     if payload.data:
         load_data.auth = True
-        methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+        methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'WEBSOCKET']
         # permission是 list[{ 'id': int, 'url': str, 'code': str}] 的形式
         permissions = await cache_client.get_permission(payload.data.id, methods)
         if permissions:
@@ -357,6 +357,9 @@ async def load_init_data(request: Request, payload: PayloadData = Depends(option
     else:
         load_data.permissions = {}
         load_data.auth = False
+
+    if settings.MODULE_URI:
+        load_data.app['domain'] = settings.MODULE_URI
 
     return Response[LoadData](data=load_data)
 
