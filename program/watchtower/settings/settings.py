@@ -162,6 +162,11 @@ class Settings(BaseSettings):
     CMDB_MODULE_ENABLE: bool = False
 
     """
+    各种模块的地址
+    """
+    MODULE_URI: dict = ""
+
+    """
     自关闭设置
     """
     # 是否进行开启，目前仅支持使用supervisor启动的程序

@@ -23,6 +23,7 @@ class ServerCRUDRouter(SQLAlchemyCRUDRouter):
         # TODO 未验证转发情况的客户端ip
         login_ip = request.client.host
 
+        # TODO 集中服务修改，之后需要改成不再依赖固定 model
         # 记录新建主机，并且记录时出错不影响用户正常添加
         try:
             async with self.db_func().begin() as session:
@@ -33,6 +34,8 @@ class ServerCRUDRouter(SQLAlchemyCRUDRouter):
                     login_ip=login_ip,
                     method=request.method,
                     uri=request.url.path,
+                    app='cmdb',
+                    module='server',
                     data=f"新建主机记录: {item}"
                 )
                 session.add(record_for_create_server)
@@ -57,6 +60,8 @@ class ServerCRUDRouter(SQLAlchemyCRUDRouter):
                     login_ip=login_ip,
                     method=request.method,
                     uri=request.url.path,
+                    app='cmdb',
+                    module='server',
                     data=data
                 )
                 session.add(record_for_update_server)
@@ -83,6 +88,8 @@ class ServerCRUDRouter(SQLAlchemyCRUDRouter):
                     login_ip=login_ip,
                     method=request.method,
                     uri=request.url.path,
+                    app='cmdb',
+                    module='server',
                     data=data
                 )
                 session.add(record_for_delete_server)
@@ -102,7 +109,6 @@ router = ServerCRUDRouter(
     ServerUpdateData,
     tags=['server'],
     verbose_name='server',
-    # TODO 限制管理员登陆
     get_all_route=True
 )
 tags_metadata = [{"name": "server", "description": "主机相关接口"}]

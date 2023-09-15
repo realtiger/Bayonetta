@@ -14,6 +14,7 @@ if settings.ADMIN_MODULE_ENABLE:
         PUT = "PUT"
         DELETE = "DELETE"
         PATCH = "PATCH"
+        WEBSOCKET = "WEBSOCKET"
 
 
     class UserRole(ModelBase):

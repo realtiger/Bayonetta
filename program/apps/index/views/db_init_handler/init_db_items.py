@@ -32,4 +32,5 @@ permission_list = [
     {"id": 30, "title": "获取单个主机", "url": r"/api/cmdb/server/\d+", "method": "GET", "code": "cmdb:get-one-server"},
     {"id": 31, "title": "更新单个主机", "url": r"/api/cmdb/server/\d+", "method": "PUT", "code": "cmdb:update-one-server"},
     {"id": 32, "title": "删除单个主机", "url": r"/api/cmdb/server/\d+", "method": "DELETE", "code": "cmdb:delete-one-server"},
+    {"id": 33, "title": "连接主机", "url": r"/api/cmdb/ws/\d+", "method": "WEBSOCKET", "code": "cmdb:connect-server"},
 ]
