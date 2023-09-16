@@ -3,7 +3,7 @@ import enum
 from sqlalchemy import String, Integer, Enum, ForeignKey, BigInteger, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from oracle.sqlalchemy import SiteBaseModel
+from oracle.sqlalchemy import SiteBaseModel, ModelBase
 
 
 # 服务器类型
@@ -39,24 +39,40 @@ class SSHAuthType(enum.Enum):
     Key = "Key"
 
 
-class ServerToServerTag(SiteBaseModel):
+class ServerToServerTag(ModelBase):
     """
     服务器标签关联表，多对多关系
     """
     __tablename__ = "server_to_server_tag"
 
+    id: Mapped[int] = mapped_column("id", BigInteger, primary_key=True, comment="服务器标签关联表id")
+
     server_id: Mapped[int] = mapped_column("server_id", BigInteger, ForeignKey("server.id", ondelete="CASCADE"), comment="服务器id")
     server_tag_id: Mapped[int] = mapped_column("server_tag_id", BigInteger, ForeignKey("server_tag.id", ondelete="CASCADE"), comment="服务器标签id")
 
 
-class AssetUserToAssetUserGroup(SiteBaseModel):
+class AssetUserToAssetUserGroup(ModelBase):
     """
     资产用户组关联表，多对多关系
     """
     __tablename__ = "asset_user_to_asset_user_group"
 
+    id: Mapped[int] = mapped_column("id", BigInteger, primary_key=True, comment="资产用户组关联表id")
+
     asset_user_id: Mapped[int] = mapped_column("asset_user_id", BigInteger, ForeignKey("asset_user.id", ondelete="CASCADE"), comment="资产用户id")
     asset_user_group_id: Mapped[int] = mapped_column("asset_user_group_id", BigInteger, ForeignKey("asset_user_group.id", ondelete="CASCADE"), comment="资产用户组id")
+
+
+class RemoteUserToRemoteUserTag(ModelBase):
+    """
+    远程用户标签关联表，多对多关系
+    """
+    __tablename__ = "remote_user_to_remote_user_tag"
+
+    id: Mapped[int] = mapped_column("id", BigInteger, primary_key=True, comment="远程用户标签关联表id")
+
+    remote_user_id: Mapped[int] = mapped_column("remote_user_id", BigInteger, ForeignKey("remote_user.id", ondelete="CASCADE"), comment="远程用户id")
+    remote_user_tag_id: Mapped[int] = mapped_column("remote_user_tag_id", BigInteger, ForeignKey("remote_user_tag.id", ondelete="CASCADE"), comment="远程用户标签id")
 
 
 class ServerTag(SiteBaseModel):
@@ -70,16 +86,6 @@ class ServerTag(SiteBaseModel):
 
     servers = relationship("Server", secondary="server_to_server_tag", back_populates="server_tags")
     user_server_remote_user_bindings = relationship("UserServerRemoteUserBinding", back_populates="server_tag")
-
-
-class RemoteUserToRemoteUserTag(SiteBaseModel):
-    """
-    远程用户标签关联表，多对多关系
-    """
-    __tablename__ = "remote_user_to_remote_user_tag"
-
-    remote_user_id: Mapped[int] = mapped_column("remote_user_id", BigInteger, ForeignKey("remote_user.id", ondelete="CASCADE"), comment="远程用户id")
-    remote_user_tag_id: Mapped[int] = mapped_column("remote_user_tag_id", BigInteger, ForeignKey("remote_user_tag.id", ondelete="CASCADE"), comment="远程用户标签id")
 
 
 class RemoteUserTag(SiteBaseModel):

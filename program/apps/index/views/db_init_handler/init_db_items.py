@@ -33,4 +33,10 @@ permission_list = [
     {"id": 31, "title": "更新单个主机", "url": r"/api/cmdb/server/\d+", "method": "PUT", "code": "cmdb:update-one-server"},
     {"id": 32, "title": "删除单个主机", "url": r"/api/cmdb/server/\d+", "method": "DELETE", "code": "cmdb:delete-one-server"},
     {"id": 33, "title": "连接主机", "url": r"/api/cmdb/ws/\d+", "method": "WEBSOCKET", "code": "cmdb:connect-server"},
+    {"id": 34, "title": "获取所有标签", "url": r"/api/cmdb/tag", "method": "GET", "code": "cmdb:get-all-tag"},
+    {"id": 35, "title": "创建单个标签", "url": r"/api/cmdb/tag", "method": "POST", "code": "cmdb:create-one-tag"},
+    {"id": 36, "title": "删除多个标签", "url": r"/api/cmdb/tag", "method": "DELETE", "code": "cmdb:delete-many-tag"},
+    {"id": 37, "title": "获取单个标签", "url": r"/api/cmdb/tag/\d+", "method": "GET", "code": "cmdb:get-one-tag"},
+    {"id": 38, "title": "更新单个标签", "url": r"/api/cmdb/tag/\d+", "method": "PUT", "code": "cmdb:update-one-tag"},
+    {"id": 39, "title": "删除单个标签", "url": r"/api/cmdb/tag/\d+", "method": "DELETE", "code": "cmdb:delete-one-tag"},
 ]

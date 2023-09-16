@@ -27,4 +27,5 @@ class ServerUpdateData(ServerCreateData, UpdateAddFields):
 
 #  查询数据返回格式
 class ServerQueryData(QueryBaseModel, ServerCreateData):
-    pass
+    server_tags: list = Field(default=[], description="标签列表，逗号分隔的标签索引", title="标签列表", example=[1, 2, 3])
+

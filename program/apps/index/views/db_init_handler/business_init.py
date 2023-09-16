@@ -13,7 +13,7 @@ async def run(*args, **kwargs):
         default_server_tag = (await session.execute(select_default_server_tag_statement)).scalar_one_or_none()
 
         if not default_server_tag:
-            default_server_tag = ServerTag(name="default", detail="默认标签")
+            default_server_tag = ServerTag(name="default", detail="默认标签", id=1)
             session.add(default_server_tag)
 
         await session.commit()
