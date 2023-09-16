@@ -1,3 +1,5 @@
+from sqlalchemy import select
+
 from watchtower import PayloadData
 from watchtower.depends.cache.cache import cache as cache_client
 
@@ -23,3 +25,23 @@ def extend_tags_metadata(source: list = None, *args):
     for arg in args:
         tags_metadata.extend(arg)
     return tags_metadata
+
+
+# TODO 临时解决方案，后续需要优化
+async def merge_m2m_field(session, m2m_row, m2m_model, update_ids):
+    m2m_row_ids = {item.id for item in m2m_row}
+    add_m2m_row_ids = set(update_ids) - m2m_row_ids
+    remove_m2m_row_ids = m2m_row_ids - set(update_ids)
+
+    if add_m2m_row_ids:
+        add_m2m_row_statement = select(m2m_model).where(m2m_model.id.in_(add_m2m_row_ids))
+        add_m2m_rows = await session.execute(add_m2m_row_statement)
+        for add_m2m_row in add_m2m_rows.scalars().all():
+            m2m_row.append(add_m2m_row)
+    if remove_m2m_row_ids:
+        remove_m2m_row_statement = select(m2m_model).where(m2m_model.id.in_(remove_m2m_row_ids))
+        remove_m2m_rows = await session.execute(remove_m2m_row_statement)
+        for remove_m2m_row in remove_m2m_rows.scalars().all():
+            m2m_row.remove(remove_m2m_row)
+    await session.commit()
+    await session.flush()

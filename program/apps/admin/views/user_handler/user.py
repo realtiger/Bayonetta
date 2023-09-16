@@ -6,7 +6,7 @@ from apps.admin.models import User, Role
 from apps.admin.views.user_handler.user_type import UserQueryData, UserCreateData, UserUpdateData, UserResetPasswordData
 from oracle.sqlalchemy import SQLAlchemyCRUDRouter, ValidationError, ITEM_NOT_FOUND_RESPONSE, ONLY_SUPERUSER_RESPONSE
 from oracle.types import ITEM_NOT_FOUND_CODE, ONLY_SUPERUSER_CODE, CREATE_FAILED_CODE, DELETE_FAILED_CODE, ModelStatus, PAGINATION
-from oracle.utils import is_superuser
+from oracle.utils import is_superuser, merge_m2m_field
 from watchtower import PayloadData, SiteException
 from watchtower.depends.authorization.authorization import get_password_hash, signature_authentication
 from watchtower.status.global_status import StatusMap
@@ -161,21 +161,8 @@ async def update_user_roles(user_id: int, roles: list[int] = Body(default=None, 
             status = Status(code=StatusMap.ONLY_SUPERUSER.code, message="当前用户不是超级管理员，无法修改用户角色")
             response = GenericBaseResponse[dict](status=status)
             raise SiteException(status_code=ONLY_SUPERUSER_CODE, response=response) from None
-        user_role_ids = {role.id for role in user.roles}
-        add_roles_ids = set(roles) - user_role_ids
-        remove_roles_ids = user_role_ids - set(roles)
 
-        if add_roles_ids:
-            add_roles_statement = select(Role).where(Role.id.in_(add_roles_ids))
-            add_roles = await session.execute(add_roles_statement)
-            user.roles.extend(add_roles.scalars().all())
-        if remove_roles_ids:
-            remove_roles_statement = select(Role).where(Role.id.in_(remove_roles_ids))
-            remove_roles = await session.execute(remove_roles_statement)
-            for role in remove_roles.scalars().all():
-                user.roles.remove(role)
-        await session.commit()
-        await session.flush()
+        await merge_m2m_field(session, user.roles, Role, roles)
 
     data = router.format_query_data(user)
     return GenericBaseResponse[UserQueryData](data=data)
