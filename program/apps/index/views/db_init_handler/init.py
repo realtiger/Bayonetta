@@ -57,7 +57,9 @@ async def init_db(force: bool = False):
             elif force:
                 user.username = "admin"
                 user.password = await get_password_hash(password.encode())
-            user.roles.append(admin_role)
+            # 判断admin_role是否已经存在于user.roles中
+            if admin_role not in user.roles:
+                user.roles.append(admin_role)
             await session.commit()
             await session.flush()
 
@@ -82,7 +84,8 @@ async def init_db(force: bool = False):
             if permissions:
                 admin_role = (await session.execute(select_role_statement)).scalar_one_or_none()
                 for permission in permissions:
-                    admin_role.permissions.append(permission)
+                    if permission not in admin_role.permissions:
+                        admin_role.permissions.append(permission)
 
             await session.commit()
             await session.flush()

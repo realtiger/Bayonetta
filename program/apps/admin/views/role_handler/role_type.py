@@ -17,4 +17,4 @@ class RoleUpdateData(RoleCreateData, UpdateAddFields):
 
 #  查询数据返回格式
 class RoleQueryData(QueryBaseModel, RoleCreateData):
-    pass
+    permissions: list = Field(default=[], description="权限列表，逗号分隔的权限索引", title="权限列表", example=[1, 2, 3])
