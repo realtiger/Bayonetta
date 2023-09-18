@@ -277,7 +277,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             schema=schema,
             create_schema=create_schema,
             update_schema=update_schema,
-            prefix=prefix or db_model.__tablename__,
+            prefix=prefix or db_model.__tablename__.replace("_", "-"),
             tags=tags,
             paginate=paginate,
             get_all_route=get_all_route,
@@ -415,7 +415,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             response = Response[self.schema]()
             model = await self._orm_get_one(db_model.id, payload)
 
-            data = await self._post_create(self.format_query_data(model), request=request, payload=payload)
+            data = await self._post_create(await self.format_query_data(model), request=request, payload=payload)
             response.update(data=data)
             return response
 
@@ -504,9 +504,9 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                         raise SiteException(status_code=UPDATE_FAILED_CODE, response=Response[dict](status=StatusMap.UPDATE_FAILED)) from None
 
             db_model = await self._orm_get_one(item_id, payload)
-            data = self.format_query_data(db_model)
+            data = await self.format_query_data(db_model)
 
-            data = await self._post_update(data, self.format_query_data(original_data), request=request, payload=payload)
+            data = await self._post_update(data, await self.format_query_data(original_data), request=request, payload=payload)
             response = Response[self.schema]()
             response.update(data=data)
             return response
@@ -520,7 +520,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 payload: PayloadData | None = Depends(optional_signature_authentication)
         ) -> Response[self.schema]:  # type: ignore
             result = await self._orm_get_one(item_id, payload)
-            data = self.format_query_data(result)
+            data = await self.format_query_data(result)
             data = await self._pre_delete(data, request=request, payload=payload)
 
             # 如果是真删除，则直接删除，否则将名称添加后缀 _delete 并将 status 设置为 inactive
@@ -571,7 +571,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             # execute the statement
             all_records_data = (await session.execute(all_statement)).scalars().all()
             for row in all_records_data:
-                all_records.append(self.format_query_data(row))
+                all_records.append(await self.format_query_data(row))
             count_records = (await session.execute(count_statement)).scalar()
         return all_records, count_records, pagination
 
@@ -596,7 +596,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
             # execute the statement
             all_records_data = (await session.execute(all_statement_by_ids)).scalars().all()
             for row in all_records_data:
-                all_records.append(self.format_query_data(row))
+                all_records.append(await self.format_query_data(row))
         return all_records, len(all_records), PAGINATION()
 
     async def _orm_get_one(self, item_id, payload: PayloadData | None) -> Model:
@@ -667,7 +667,7 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                     foreign_key_columns.append(db_model_field)
         return common_columns, foreign_key_columns
 
-    def format_query_data(self, row) -> dict:
+    async def format_query_data(self, row) -> dict:
         """
         格式化查询数据，单条数据格式化
         :param row: 每一行数据

@@ -50,6 +50,10 @@ class ServerToServerTag(ModelBase):
     server_id: Mapped[int] = mapped_column("server_id", BigInteger, ForeignKey("server.id", ondelete="CASCADE"), comment="服务器id")
     server_tag_id: Mapped[int] = mapped_column("server_tag_id", BigInteger, ForeignKey("server_tag.id", ondelete="CASCADE"), comment="服务器标签id")
 
+    __table_args__ = (
+        UniqueConstraint("server_id", "server_tag_id", name="server_to_server_tag"),
+    )
+
 
 class AssetUserToAssetUserGroup(ModelBase):
     """
@@ -62,6 +66,10 @@ class AssetUserToAssetUserGroup(ModelBase):
     asset_user_id: Mapped[int] = mapped_column("asset_user_id", BigInteger, ForeignKey("asset_user.id", ondelete="CASCADE"), comment="资产用户id")
     asset_user_group_id: Mapped[int] = mapped_column("asset_user_group_id", BigInteger, ForeignKey("asset_user_group.id", ondelete="CASCADE"), comment="资产用户组id")
 
+    __table_args__ = (
+        UniqueConstraint("asset_user_id", "asset_user_group_id", name="asset_user_to_asset_user_group"),
+    )
+
 
 class RemoteUserToRemoteUserTag(ModelBase):
     """
@@ -73,6 +81,10 @@ class RemoteUserToRemoteUserTag(ModelBase):
 
     remote_user_id: Mapped[int] = mapped_column("remote_user_id", BigInteger, ForeignKey("remote_user.id", ondelete="CASCADE"), comment="远程用户id")
     remote_user_tag_id: Mapped[int] = mapped_column("remote_user_tag_id", BigInteger, ForeignKey("remote_user_tag.id", ondelete="CASCADE"), comment="远程用户标签id")
+
+    __table_args__ = (
+        UniqueConstraint("remote_user_id", "remote_user_tag_id", name="remote_user_to_remote_user_tag"),
+    )
 
 
 class ServerTag(SiteBaseModel):
@@ -118,6 +130,22 @@ class RemoteUser(SiteBaseModel):
     remote_user_tags = relationship("RemoteUserTag", secondary="remote_user_to_remote_user_tag", back_populates="remote_users")
 
 
+class ServerAdminInfo(SiteBaseModel):
+    """
+    服务器带外管理信息表
+    目前仅支持ipmi
+    """
+    __tablename__ = "server_admin_info"
+
+    name: Mapped[str] = mapped_column("name", String(512), comment="名称")
+    ip: Mapped[str] = mapped_column("ip", String(512), comment="ip")
+    username: Mapped[str] = mapped_column("username", String(512), comment="用户名")
+    password: Mapped[str] = mapped_column("password", String(512), comment="密码")
+    detail: Mapped[str] = mapped_column("detail", String(512), comment="备注")
+
+    servers = relationship("Server", back_populates="server_admin_info")
+
+
 class Server(SiteBaseModel):
     """
     服务器表
@@ -138,6 +166,15 @@ class Server(SiteBaseModel):
     region: Mapped[str] = mapped_column("region", String(128), comment="区域")
     detail: Mapped[str] = mapped_column("detail", String(128), comment="备注")
 
+    server_admin_info_id: Mapped[int] = mapped_column(
+        "server_admin_info_id",
+        BigInteger,
+        ForeignKey("server_admin_info.id", ondelete="CASCADE"),
+        comment="服务器管理信息id",
+        nullable=True
+    )
+
+    server_admin_info = relationship("ServerAdminInfo", back_populates="servers")
     server_tags = relationship("ServerTag", secondary="server_to_server_tag", back_populates="servers")
 
 

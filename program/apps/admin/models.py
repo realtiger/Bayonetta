@@ -29,6 +29,11 @@ if settings.ADMIN_MODULE_ENABLE:
         user_id: Mapped[int] = mapped_column("user_id", BigInteger, ForeignKey("user.id", ondelete="CASCADE"), comment="用户id")
         role_id: Mapped[int] = mapped_column("role_id", BigInteger, ForeignKey("role.id", ondelete="CASCADE"), comment="角色id")
 
+        # 联合唯一索引
+        __table_args__ = (
+            UniqueConstraint("user_id", "role_id", name="user_id_role_id"),
+        )
+
 
     class RolePermission(ModelBase):
         """
@@ -39,6 +44,10 @@ if settings.ADMIN_MODULE_ENABLE:
         id: Mapped[int] = mapped_column("id", BigInteger, primary_key=True, comment="角色权限关联表id")
         role_id: Mapped[int] = mapped_column("role_id", BigInteger, ForeignKey("role.id", ondelete="CASCADE"), comment="角色id")
         permission_id: Mapped[int] = mapped_column("permission_id", BigInteger, ForeignKey("permission.id", ondelete="CASCADE"), comment="权限id")
+
+        __table_args__ = (
+            UniqueConstraint("role_id", "permission_id", name="role_id_permission_id"),
+        )
 
 
     class Role(SiteBaseModel):

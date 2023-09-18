@@ -164,7 +164,7 @@ async def update_user_roles(user_id: int, roles: list[int] = Body(default=None, 
 
         await merge_m2m_field(session, user.roles, Role, roles)
 
-    data = router.format_query_data(user)
+    data = await router.format_query_data(user)
     return GenericBaseResponse[UserQueryData](data=data)
 
 
@@ -194,4 +194,4 @@ async def reset_password(user_id: int, password: UserResetPasswordData, payload:
         await session.commit()
         await session.flush()
 
-    return GenericBaseResponse[UserQueryData](data=router.format_query_data(user))
+    return GenericBaseResponse[UserQueryData](data=await router.format_query_data(user))

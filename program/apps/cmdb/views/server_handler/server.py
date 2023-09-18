@@ -141,5 +141,5 @@ async def update_server_to_server_tag(server_id: int, tags: list[int] = Body(def
 
         await merge_m2m_field(session, server.server_tags, ServerTag, tags)
 
-    data = router.format_query_data(server)
+    data = await router.format_query_data(server)
     return GenericBaseResponse[ServerQueryData](data=data)
