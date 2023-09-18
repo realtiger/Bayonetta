@@ -6,7 +6,7 @@ from oracle.types import QueryBaseModel, UpdateAddFields
 # ### 数据格式定义 ###
 # 单个新建格式
 class MenuCreateData(BaseModel):
-    title: str = Field(default="", description="菜单名称", title="菜单名称", example="menu-example", min_length=1)
+    title: str = Field(description="菜单名称", title="菜单名称", example="menu-example", min_length=1)
     parent: int | None = Field(default=None, description="父级菜单id", title="父级菜单id", example=1)
     is_parent: bool = Field(default=False, description="是否为父级菜单", title="是否为父级菜单", example=False)
     icon: str = Field(default="", description="菜单图标", title="菜单图标", example="icon-menu")

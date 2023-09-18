@@ -8,8 +8,8 @@ from oracle.types import QueryBaseModel, UpdateAddFields
 # ### 数据格式定义 ###
 # 基本新建更新格式
 class BaseUserCreateAndUpdateData(BaseModel):
-    username: str = Field(default=None, description="用户名", title="用户名", example="username", min_length=1)
-    name: str = Field(default=None, description="名字", title="名字", example="name", min_length=1)
+    username: str = Field(description="用户名", title="用户名", example="username", min_length=1)
+    name: str = Field(description="名字", title="名字", example="name", min_length=1)
     email: str = Field(default=None, description="邮箱", title="邮箱", example="abc@abc.com")
     avatar: str = Field(default=None, description="头像", title="头像", example="/assets/images/avatar/default.jpg")
     detail: str = Field(default=None, description="详情", title="详情", example="详情信息")
@@ -17,8 +17,8 @@ class BaseUserCreateAndUpdateData(BaseModel):
 
 # 重置密码
 class UserResetPasswordData(BaseModel):
-    password: str = Field(default="", description="密码", title="密码", example="password", min_length=8)
-    re_password: str = Field(default="", description="确认密码", title="确认密码", example="password")
+    password: str = Field(description="密码", title="密码", example="password", min_length=8)
+    re_password: str = Field(description="确认密码", title="确认密码", example="password")
 
 
 # 单个更新格式
