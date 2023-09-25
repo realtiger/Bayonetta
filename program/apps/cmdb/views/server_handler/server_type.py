@@ -1,6 +1,7 @@
 from pydantic import Field, BaseModel
 
 from apps.cmdb.models import ServerType, CreatedBy
+from apps.cmdb.views.server_handler.server_admin_type import ServerAdminQueryData
 from oracle.types import QueryBaseModel, UpdateAddFields
 
 
@@ -28,4 +29,4 @@ class ServerUpdateData(ServerCreateData, UpdateAddFields):
 #  查询数据返回格式
 class ServerQueryData(QueryBaseModel, ServerCreateData):
     server_tags: list = Field(default=[], description="标签列表，逗号分隔的标签索引", title="标签列表", example=[1, 2, 3])
-
+    server_admin_info: ServerAdminQueryData = Field(default=None, description="带外管理信息索引", title="带外管理信息索引")

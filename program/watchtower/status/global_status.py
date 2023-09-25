@@ -20,6 +20,7 @@ class StatusMap:
     UPDATE_FAILED = Status("E00025", '更新失败')
     DELETE_FAILED = Status("E00026", '删除失败')
     DATA_VALIDATION_FAILED = Status("E00027", '数据校验失败')
+    KUBE_GET_RESOURCE_FAILED = Status("E00028", '获取k8s资源失败')
 
     # 通用错误
     COMMON_ERROR = common_error_status

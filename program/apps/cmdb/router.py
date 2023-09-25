@@ -11,7 +11,7 @@ router = APIRouter(prefix='/cmdb', dependencies=[Depends(signature_authenticatio
 
 router.include_router(server_router, tags=['server'])
 router.include_router(tag_router)
-router.include_router(server_admin_router, tags=['server_admin'])
+router.include_router(server_admin_router, tags=['server-admin'])
 
 tags_metadata = extend_tags_metadata(
     server_tags_metadata,

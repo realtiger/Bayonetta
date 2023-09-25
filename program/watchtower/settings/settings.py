@@ -160,6 +160,7 @@ class Settings(BaseSettings):
     AUTH_MODULE_ENABLE: bool = False
     ADMIN_MODULE_ENABLE: bool = False
     CMDB_MODULE_ENABLE: bool = False
+    KUBE_DASHBOARD_MODULE_ENABLE: bool = False
 
     """
     各种模块的地址

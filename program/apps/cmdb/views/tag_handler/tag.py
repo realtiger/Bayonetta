@@ -100,8 +100,8 @@ router = ServerTagCRUDRouter(
     ServerTag,
     ServerTagCreateData,
     ServerTagUpdateData,
-    tags=['server_tag'],
+    tags=['server-tag'],
     verbose_name='server_tag',
     delete_all_route=True
 )
-tags_metadata = [{"name": "server_tag", "description": "主机标签相关接口"}]
+tags_metadata = [{"name": "server-tag", "description": "主机标签相关接口"}]

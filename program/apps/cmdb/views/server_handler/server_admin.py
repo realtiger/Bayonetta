@@ -63,15 +63,15 @@ router = ServerAdminCRUDRouter(
     ServerAdminInfo,
     ServerAdminCreateData,
     ServerAdminUpdateData,
-    tags=['server_admin_info'],
+    tags=['server-admin-info'],
     verbose_name='server_admin',
     delete_all_route=True
 )
-tags_metadata = [{"name": "server_admin", "description": "主机管理信息"}]
+tags_metadata = [{"name": "server-admin", "description": "主机管理信息"}]
 
 
 @router.post('/exec/{item_id}', summary="修改主机标签", description="修改主机标签", response_model=ServerAdminInfoOperationResponseData)
-async def update_server_admin_info(item_id: int, operation_data: ServerAdminOperationData, payload: PayloadData = Depends(signature_authentication)):
+async def update_server_admin_info(item_id: int, operation_data: ServerAdminOperationData):
     """
     修改主机标签
     :param operation_data:

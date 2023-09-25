@@ -1,12 +1,15 @@
+from typing import Sequence
+
 from fastapi import Request, Body, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from apps.admin.models import OperationRecord
 from apps.cmdb.models import Server, ServerType, CreatedBy, ServerTag
+from apps.cmdb.views.server_handler.server_admin_type import ServerAdminQueryData
 from apps.cmdb.views.server_handler.server_type import ServerQueryData, ServerCreateData, ServerUpdateData
 from oracle.sqlalchemy import SQLAlchemyCRUDRouter, ValidationError, ITEM_NOT_FOUND_RESPONSE
-from oracle.types import ITEM_NOT_FOUND_CODE
+from oracle.types import ITEM_NOT_FOUND_CODE, PAGINATION
 from oracle.utils import merge_m2m_field
 from watchtower import PayloadData, signature_authentication, SiteException
 from watchtower.settings import logger
@@ -107,6 +110,29 @@ class ServerCRUDRouter(SQLAlchemyCRUDRouter):
 
         return item
 
+    async def _orm_get_all(
+            self,
+            pagination: PAGINATION = None,
+            filters: dict[str, str] = None,
+            orders: list[str] = None,
+            ids: list[int] = None,
+            payload: PayloadData | None = None
+    ) -> tuple[Sequence, int, PAGINATION]:
+        all_records, count_records, pagination = await super()._orm_get_all(pagination, filters, orders, ids, payload)
+        all_records_format = []
+        for record in all_records:
+            record["server_type"] = record["server_type"].name
+            record["created_by"] = record["created_by"].name
+            server_admin_info = dict()
+            for field in ServerAdminQueryData.__fields__.keys():
+                if hasattr(record["server_admin_info"], field):
+                    server_admin_info[field] = getattr(record["server_admin_info"], field)
+                else:
+                    server_admin_info[field] = None
+            record["server_admin_info"] = server_admin_info
+            all_records_format.append(record)
+        return all_records_format, count_records, pagination
+
 
 router = ServerCRUDRouter(
     ServerQueryData,
@@ -123,7 +149,7 @@ tags_metadata = [{"name": "server", "description": "主机相关接口"}]
 @router.put("/{server_id}/tags", summary="修改主机标签", description="修改主机标签", response_model=ServerQueryData, responses=ITEM_NOT_FOUND_RESPONSE)
 async def update_server_to_server_tag(server_id: int, tags: list[int] = Body(default=None, embed=True), payload: PayloadData = Depends(signature_authentication)):
     """
-    修改用户角色
+    修改主机标签
     \f
     :param server_id:
     :param tags:
@@ -141,5 +167,32 @@ async def update_server_to_server_tag(server_id: int, tags: list[int] = Body(def
 
         await merge_m2m_field(session, server.server_tags, ServerTag, tags)
 
-    data = await router.format_query_data(server)
+    data = await router._orm_get_one(server_id, payload)
+    return GenericBaseResponse[ServerQueryData](data=data)
+
+
+@router.put("/{server_id}/server-admin/{server_admin_id}", summary="修改主机管理", description="修改主机管理", response_model=ServerQueryData, responses=ITEM_NOT_FOUND_RESPONSE)
+async def update_server_to_server_admin(server_id: int, server_admin_id: int, payload: PayloadData = Depends(signature_authentication)):
+    """
+    修改主机管理
+    \f
+    :param server_id:
+    :param server_admin_id:
+    :param payload:
+    :return:
+    """
+    server_statement = select(Server).join(Server.server_admin_info, isouter=True).where(Server.id == server_id).distinct()
+    async with router.db_func().begin() as session:
+        server = await session.execute(server_statement)
+        server = server.scalar_one_or_none()
+        if not server:
+            status = Status(code=StatusMap.ITEM_NOT_FOUND.code, message="没有找到服务器")
+            response = GenericBaseResponse[dict](status=status)
+            raise SiteException(status_code=ITEM_NOT_FOUND_CODE, response=response) from None
+
+        server.server_admin_info_id = server_admin_id
+        await session.commit()
+        await session.flush()
+
+    data = await router._orm_get_one(server_id, payload)
     return GenericBaseResponse[ServerQueryData](data=data)

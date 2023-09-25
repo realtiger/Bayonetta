@@ -1,7 +1,7 @@
 import re
 import time
 from datetime import datetime
-from typing import Type, Any, Callable, Generator, Coroutine, Sequence, Optional
+from typing import Type, Any, Callable, Generator, Coroutine, Sequence, Optional, Iterable
 
 from fastapi import Depends, Query, Body, Request
 from fastapi.types import DecoratedCallable
@@ -681,7 +681,15 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
                 row_dict[field.key] = getattr(row, field.key)
         for field in foreign_key_columns:
             if hasattr(row, field.key):
-                row_dict[field.key] = [child.id for child in getattr(row, field.key)]
+                foreign_value = getattr(row, field.key)
+                if foreign_value is None:
+                    row_dict[field.key] = 0
+                else:
+                    value = getattr(row, field.key)
+                    if isinstance(value, Iterable):
+                        row_dict[field.key] = [child.id for child in getattr(row, field.key)]
+                    else:
+                        row_dict[field.key] = value
 
         return row_dict
 
@@ -769,6 +777,39 @@ class SQLAlchemyCRUDRouter(CRUDGenerator[SCHEMA]):
         :return:
         """
         return item
+
+    async def _pre_get_all(
+            self,
+            pagination: PAGINATION,
+            filters: dict[str, str],
+            orders: list[str], ids: list[int],
+            payload: PayloadData | None
+    ) -> tuple[PAGINATION, dict[str, str], list[str], list[int]]:
+        """
+        获取所有数据前的操作，返回操作后的数据
+        :param pagination:
+        :param filters:
+        :param orders:
+        :param ids:
+        :return:
+        """
+        return pagination, filters, orders, ids
+
+    async def _post_get_all(
+            self,
+            all_records: Sequence,
+            count_records: int,
+            pagination: PaginationData,
+            payload: PayloadData | None
+    ) -> tuple[Sequence, int, PaginationData]:
+        """
+        获取所有数据后的操作，返回操作后的数据
+        :param all_records:
+        :param count_records:
+        :param pagination:
+        :return:
+        """
+        return all_records, count_records, pagination
 
     async def _pre_create(self, item, request: Request | None = None, payload: PayloadData | None = None):
         """
