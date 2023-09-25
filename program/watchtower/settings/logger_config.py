@@ -110,7 +110,7 @@ def get_logging_dict(log_level: str, log_dir: Path, project_name: str = "program
         'loggers': {
             # 默认的logger应用如下配置
             '': {
-                'handlers': ['console'],
+                'handlers': ['default', 'console'],
                 'level': log_level,
                 'propagate': True
             },
